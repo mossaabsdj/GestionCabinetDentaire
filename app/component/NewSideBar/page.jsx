@@ -19,6 +19,7 @@ import {
   Settings,
   Calendar,
   Sparkles,
+  DollarSign,
 } from "lucide-react";
 import app from "@/param.json";
 const Sidebar = ({
@@ -213,6 +214,7 @@ export default function App() {
     { title: "Tableau de bord", url: "Accueill", icon: Home },
     { title: "Consulter", url: "Consulter", icon: Stethoscope },
     { title: "Patients", url: "Patients", icon: Users },
+    { title: "Finances", url: "Finance", icon: DollarSign },
     { title: "Predifined", url: "Predifined", icon: FileText },
     { title: "Médicaments", url: "Medicament", icon: Pill },
     { title: "Bilans", url: "Bilans", icon: TestTube },

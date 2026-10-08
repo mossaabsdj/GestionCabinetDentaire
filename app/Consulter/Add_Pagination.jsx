@@ -47,10 +47,13 @@ import LoadingScreen from "../component/LoadingScreen/page";
 import { motion, AnimatePresence } from "framer-motion";
 import ModernSearchBar from "../component/SearchBar/SearchBar";
 import DatePickerFilter from "../component/DatePickerFilter/DatePickerFilter";
+import TraitementsTab from "@/app/component/Traitements/TraitementsTab";
+import FinancesPatientTab from "@/app/component/Finances/FinancesPatientTab";
 
 export default function PatientDashboard() {
   const searchRef = useRef();
   const [selectedPatient, setSelectedPatient] = useState(null);
+  const [preselectedTraitement, setPreselectedTraitement] = useState(null);
   const [search, setSearch] = useState("");
   const [files, setFiles] = useState([]);
   const [refrech, setrefrech] = useState(false);
@@ -179,7 +182,8 @@ export default function PatientDashboard() {
       formData?.ordonnance?.items?.length > 0 ||
       formData?.bilanRecip?.items?.length > 0 ||
       formData?.justification ||
-      formData?.radios?.length > 0;
+      formData?.radios?.length > 0 ||
+      formData?.traitements?.length > 0;
 
     if (!hasData) {
       Swal.fire({
@@ -221,6 +225,7 @@ export default function PatientDashboard() {
           rendezVousDate: formData.rendezVousDate || null,
           rendezVousDescription: formData.rendezVousDescription?.trim() || null,
           radios: formData.radios || [],
+          traitements: formData.traitements || [],
           ordonnance:
             formData?.ordonnance?.items?.length > 0
               ? {
@@ -875,7 +880,9 @@ export default function PatientDashboard() {
                   <Plus className="mr-2 h-4 w-4" /> Nouvelle Prescription / Bilan / Justification
                 </Button>
               ) : selectedtab === "Visites" ||
-                selectedtab === "Informations Patient" ? (
+                selectedtab === "Informations Patient" ||
+                selectedtab === "Traitements" ||
+                selectedtab === "Finances & Crédits" ? (
                 <Button
                   onClick={() => {
                     setNewConsultation(true);
@@ -908,6 +915,8 @@ export default function PatientDashboard() {
         >
           {[
             "Informations Patient",
+            "Traitements",
+            "Finances & Crédits",
             "Analyses et Résultats",
             "Vaccinations",
             "Visites",
@@ -1114,6 +1123,22 @@ export default function PatientDashboard() {
                   ))}
                 </>
               )}
+              {selectedtab === "Traitements" && (
+                <TraitementsTab
+                  patient={selectedPatient}
+                  onContinueTraitement={(traitement) => {
+                    setPreselectedTraitement(traitement);
+                    setselectedtab("+ Nouvelle Consultation");
+                  }}
+                  onRefresh={() => fetchPatientById(selectedPatient?.id)}
+                />
+              )}
+              {selectedtab === "Finances & Crédits" && (
+                <FinancesPatientTab
+                  patient={selectedPatient}
+                  onRefresh={() => fetchPatientById(selectedPatient?.id)}
+                />
+              )}
               {selectedtab === "+ Nouvelle Consultation" && (
                 <NewConsultationPage
                   onSave={setNewConsultationData}
@@ -1122,6 +1147,10 @@ export default function PatientDashboard() {
                   viderForm={viderForm}
                   openAddModal={openAddElementModal}
                   setOpenAddModal={setOpenAddElementModal}
+                  preselectedTraitement={preselectedTraitement}
+                  onClearPreselectedTraitement={() =>
+                    setPreselectedTraitement(null)
+                  }
                 />
               )}
               {selectedtab === "Analyses et Résultats" && (

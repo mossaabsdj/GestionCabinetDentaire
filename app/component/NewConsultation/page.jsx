@@ -14,6 +14,10 @@ import {
   Sparkles,
   Edit3,
   ImageIcon,
+  Activity,
+  DollarSign,
+  CheckCircle2,
+  X,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -35,6 +39,8 @@ export default function NewConsultationPage({
   setViderForm,
   openAddModal = false,
   setOpenAddModal,
+  preselectedTraitement = null,
+  onClearPreselectedTraitement,
 }) {
   const [form, setForm] = useState({
     note: "",
@@ -45,6 +51,7 @@ export default function NewConsultationPage({
     radios: [],
     rendezVousDate: "",
     rendezVousDescription: "",
+    traitements: [],
   });
 
   const [saving, setSaving] = useState(false);
@@ -55,6 +62,19 @@ export default function NewConsultationPage({
   const [showNewOrdonnance, setShowNewOrdonnance] = useState(false);
   const [ordonnanceDefaultTab, setOrdonnanceDefaultTab] =
     useState("ordonnance");
+
+  // Traitement section states (Tabs & Selector)
+  const [activeTreatmentIndex, setActiveTreatmentIndex] = useState(0);
+  const [showAddTreatmentDialog, setShowAddTreatmentDialog] = useState(false);
+  const [addTreatmentMode, setAddTreatmentMode] = useState("existing"); // "existing" | "new"
+  const [selectedExistingId, setSelectedExistingId] = useState("");
+  const [newTreatmentFields, setNewTreatmentFields] = useState({
+    description: "",
+    dent: "",
+    prixTotal: "",
+  });
+  const [patientTraitements, setPatientTraitements] = useState([]);
+  const [loadingTraitements, setLoadingTraitements] = useState(false);
 
   // Radio Modal state
   const [showRadioModal, setShowRadioModal] = useState(false);
@@ -139,6 +159,60 @@ export default function NewConsultationPage({
     setForm((s) => ({ ...s, [name]: value }));
   }
 
+  // Fetch patient ongoing treatments
+  const fetchPatientTraitements = async () => {
+    if (!selectedPatient?.id) return;
+    setLoadingTraitements(true);
+    try {
+      const res = await fetch(
+        `/api/traitements?patientId=${selectedPatient.id}&statut=EN_COURS`,
+      );
+      if (res.ok) {
+        const data = await res.json();
+        setPatientTraitements(data);
+      }
+    } catch (err) {
+      console.error("Erreur chargement traitements patient:", err);
+    } finally {
+      setLoadingTraitements(false);
+    }
+  };
+
+  // Sync preselected treatment if continued from Treatments tab
+  useEffect(() => {
+    if (preselectedTraitement && selectedPatient?.id) {
+      const existingIdx = form.traitements.findIndex(
+        (t) => t.traitementId === preselectedTraitement.id,
+      );
+      if (existingIdx !== -1) {
+        setActiveTreatmentIndex(existingIdx);
+      } else {
+        const newEntry = {
+          traitementId: preselectedTraitement.id,
+          nouveauTraitement: null,
+          description: preselectedTraitement.description || "",
+          dent: preselectedTraitement.dent || "",
+          prixTotal: preselectedTraitement.prixTotal || 0,
+          totalPaye: preselectedTraitement.totalPaye || 0,
+          resteAPayer: preselectedTraitement.resteAPayer || 0,
+          acteRealise: "",
+          hasVersement: false,
+          versementMontant: "",
+          versementNote: "",
+          hasRendezVous: false,
+          rendezVousDate: "",
+          rendezVousDescription: "",
+        };
+        setForm((prev) => {
+          const next = [...prev.traitements, newEntry];
+          setActiveTreatmentIndex(next.length - 1);
+          return { ...prev, traitements: next };
+        });
+      }
+      onClearPreselectedTraitement?.();
+    }
+  }, [preselectedTraitement, selectedPatient?.id]);
+
   useEffect(() => {
     if (viderForm) {
       setForm({
@@ -150,7 +224,9 @@ export default function NewConsultationPage({
         radios: [],
         rendezVousDate: "",
         rendezVousDescription: "",
+        traitements: [],
       });
+      setActiveTreatmentIndex(0);
       setViderForm(false);
     }
   }, [viderForm, setViderForm]);
@@ -159,7 +235,65 @@ export default function NewConsultationPage({
     setError("");
     setSaving(true);
     try {
-      await Promise.resolve(onSave?.({ ...form }));
+      // Validate treatments session acts and payments
+      for (let i = 0; i < form.traitements.length; i++) {
+        const tr = form.traitements[i];
+        if (!tr.acteRealise || !tr.acteRealise.trim()) {
+          setActiveTreatmentIndex(i);
+          throw new Error(
+            `Veuillez renseigner l'acte réalisé pour le soin "${tr.description}".`,
+          );
+        }
+        if (tr.hasVersement && parseFloat(tr.versementMontant) > 0) {
+          const m = parseFloat(tr.versementMontant);
+          if (tr.traitementId && m > tr.resteAPayer) {
+            setActiveTreatmentIndex(i);
+            throw new Error(
+              `Le versement (${m.toLocaleString("fr-FR")} DZD) pour "${tr.description}" ne peut pas dépasser le reste à payer (${tr.resteAPayer.toLocaleString("fr-FR")} DZD).`,
+            );
+          }
+        }
+      }
+
+      // Format treatments payload for API
+      const formattedTraitements = form.traitements.map((tr) => {
+        const montantNum = parseFloat(tr.versementMontant);
+        return {
+          traitementId: tr.traitementId || null,
+          nouveauTraitement: tr.nouveauTraitement
+            ? {
+                description: tr.description.trim(),
+                dent: tr.dent?.trim() || null,
+                prixTotal: parseFloat(tr.prixTotal) || 0,
+                statut: "EN_COURS",
+              }
+            : null,
+          acteRealise: tr.acteRealise.trim(),
+          versement:
+            tr.hasVersement && montantNum > 0
+              ? {
+                  montant: montantNum,
+                  note: tr.versementNote?.trim() || "Versement de séance",
+                }
+              : null,
+          rendezVous:
+            tr.hasRendezVous && tr.rendezVousDate
+              ? {
+                  date: tr.rendezVousDate,
+                  description:
+                    tr.rendezVousDescription?.trim() ||
+                    `Suite séance ${tr.description}`,
+                }
+              : null,
+        };
+      });
+
+      await Promise.resolve(
+        onSave?.({
+          ...form,
+          traitements: formattedTraitements,
+        }),
+      );
     } catch (e) {
       setError(e?.message ?? "Erreur lors de l'enregistrement");
     } finally {
@@ -167,7 +301,7 @@ export default function NewConsultationPage({
     }
   }
 
-  // Edit actions
+  // Edit actions for header items
   const handleEdit = (type, index = null) => {
     if (type === "ordonnance") {
       setOrdonnanceDefaultTab("ordonnance");
@@ -224,6 +358,12 @@ export default function NewConsultationPage({
         rendezVousDate: "",
         rendezVousDescription: "",
       }));
+    } else if (type === "traitementTab") {
+      setForm((prev) => ({
+        ...prev,
+        traitements: prev.traitements.filter((_, i) => i !== index),
+      }));
+      setActiveTreatmentIndex((prev) => Math.max(0, prev - 1));
     }
     setDeleteConfirm({
       open: false,
@@ -231,6 +371,102 @@ export default function NewConsultationPage({
       index: null,
       title: "",
       message: "",
+    });
+  };
+
+  // Treatment management helpers
+  const handleAddExistingTreatment = () => {
+    if (!selectedExistingId) {
+      setError("Veuillez sélectionner un traitement dans la liste.");
+      return;
+    }
+    const selected = patientTraitements.find(
+      (t) => t.id === Number(selectedExistingId),
+    );
+    if (!selected) return;
+
+    const alreadyIdx = form.traitements.findIndex(
+      (t) => t.traitementId === selected.id,
+    );
+    if (alreadyIdx !== -1) {
+      setActiveTreatmentIndex(alreadyIdx);
+      setShowAddTreatmentDialog(false);
+      setSelectedExistingId("");
+      return;
+    }
+
+    const newEntry = {
+      traitementId: selected.id,
+      nouveauTraitement: null,
+      description: selected.description,
+      dent: selected.dent || null,
+      prixTotal: selected.prixTotal || 0,
+      totalPaye: selected.totalPaye || 0,
+      resteAPayer: selected.resteAPayer || 0,
+      acteRealise: "",
+      hasVersement: false,
+      versementMontant: "",
+      versementNote: "",
+      hasRendezVous: false,
+      rendezVousDate: "",
+      rendezVousDescription: "",
+    };
+
+    setForm((prev) => {
+      const next = [...prev.traitements, newEntry];
+      setActiveTreatmentIndex(next.length - 1);
+      return { ...prev, traitements: next };
+    });
+    setSelectedExistingId("");
+    setShowAddTreatmentDialog(false);
+  };
+
+  const handleAddNewTreatment = () => {
+    if (!newTreatmentFields.description.trim()) {
+      setError("Veuillez renseigner la description du soin.");
+      return;
+    }
+    const prix = parseFloat(newTreatmentFields.prixTotal) || 0;
+    const newEntry = {
+      traitementId: null,
+      nouveauTraitement: {
+        description: newTreatmentFields.description.trim(),
+        dent: newTreatmentFields.dent?.trim() || null,
+        prixTotal: prix,
+        statut: "EN_COURS",
+      },
+      description: newTreatmentFields.description.trim(),
+      dent: newTreatmentFields.dent?.trim() || null,
+      prixTotal: prix,
+      totalPaye: 0,
+      resteAPayer: prix,
+      acteRealise: "",
+      hasVersement: false,
+      versementMontant: "",
+      versementNote: "",
+      hasRendezVous: false,
+      rendezVousDate: "",
+      rendezVousDescription: "",
+    };
+
+    setForm((prev) => {
+      const next = [...prev.traitements, newEntry];
+      setActiveTreatmentIndex(next.length - 1);
+      return { ...prev, traitements: next };
+    });
+    setNewTreatmentFields({ description: "", dent: "", prixTotal: "" });
+    setShowAddTreatmentDialog(false);
+  };
+
+  const updateActiveTreatment = (patch) => {
+    setForm((prev) => {
+      if (!prev.traitements[activeTreatmentIndex]) return prev;
+      const updated = [...prev.traitements];
+      updated[activeTreatmentIndex] = {
+        ...updated[activeTreatmentIndex],
+        ...patch,
+      };
+      return { ...prev, traitements: updated };
     });
   };
 
@@ -637,6 +873,436 @@ export default function NewConsultationPage({
           />
         </div>
 
+        {/* ======================================================== */}
+        {/* 🦷 SECTION SOINS & TRAITEMENTS DENTAIRES (PAR ONGLETS) */}
+        {/* ======================================================== */}
+        <div className="mb-6 rounded-2xl border border-teal-200/90 bg-white shadow-sm overflow-hidden">
+          {/* Header de la section soins */}
+          <div className="bg-gradient-to-r from-teal-50 via-teal-50/40 to-white px-5 py-3.5 border-b border-teal-100 flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5">
+              <div className="p-2 bg-teal-600 text-white rounded-xl shadow-sm">
+                <Activity className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="font-bold text-slate-900 text-base flex items-center gap-2">
+                  Soins & Traitements dentaires
+                  <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-teal-100 text-teal-800 border border-teal-200">
+                    {form.traitements.length}
+                  </span>
+                </h3>
+                <p className="text-xs text-slate-500">
+                  Associez un ou plusieurs soins réalisés lors de cette consultation
+                </p>
+              </div>
+            </div>
+
+            <Button
+              type="button"
+              onClick={() => {
+                fetchPatientTraitements();
+                setShowAddTreatmentDialog(true);
+              }}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold bg-teal-600 hover:bg-teal-700 text-white shadow-sm transition"
+            >
+              <Plus size={15} />
+              <span>Ajouter un soin</span>
+            </Button>
+          </div>
+
+          {/* Corps de la section : Vide OU Onglets */}
+          {form.traitements.length === 0 ? (
+            <div className="p-8 text-center bg-slate-50/50">
+              <div className="max-w-md mx-auto">
+                <div className="w-12 h-12 mx-auto mb-3 rounded-2xl bg-teal-100/70 text-teal-700 flex items-center justify-center">
+                  <Activity className="w-6 h-6" />
+                </div>
+                <h4 className="text-sm font-semibold text-slate-800 mb-1">
+                  Aucun soin dentaire associé à cette consultation
+                </h4>
+                <p className="text-xs text-slate-500 mb-4">
+                  Sélectionnez un traitement en cours du patient ou créez un nouveau soin pour renseigner l'acte réalisé, le versement éventuel et le prochain rendez-vous.
+                </p>
+                <div className="flex items-center justify-center gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      fetchPatientTraitements();
+                      setAddTreatmentMode("existing");
+                      setShowAddTreatmentDialog(true);
+                    }}
+                    className="rounded-xl text-xs border-teal-300 text-teal-800 hover:bg-teal-50"
+                  >
+                    Sélectionner un soin en cours
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={() => {
+                      fetchPatientTraitements();
+                      setAddTreatmentMode("new");
+                      setShowAddTreatmentDialog(true);
+                    }}
+                    className="rounded-xl text-xs bg-teal-600 hover:bg-teal-700 text-white"
+                  >
+                    <Plus size={14} className="mr-1" />
+                    Nouveau traitement
+                  </Button>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div>
+              {/* BARRE D'ONGLETS */}
+              <div className="flex items-center gap-1.5 px-4 pt-3 border-b border-slate-200 bg-slate-50/70 overflow-x-auto">
+                {form.traitements.map((tr, idx) => {
+                  const isActive = idx === activeTreatmentIndex;
+                  return (
+                    <div
+                      key={`tab-tr-${idx}`}
+                      className={`group flex items-center gap-2 px-3.5 py-2.5 rounded-t-xl text-xs font-medium cursor-pointer transition-all border-t border-x -mb-[1px] select-none ${
+                        isActive
+                          ? "bg-white border-slate-200 border-b-white text-teal-800 font-semibold shadow-sm"
+                          : "bg-slate-100/80 border-transparent text-slate-600 hover:bg-slate-200/60 hover:text-slate-900"
+                      }`}
+                      onClick={() => setActiveTreatmentIndex(idx)}
+                    >
+                      <Activity
+                        size={14}
+                        className={isActive ? "text-teal-600" : "text-slate-400"}
+                      />
+                      <span className="truncate max-w-[130px]">
+                        {tr.description || `Soin #${idx + 1}`}
+                      </span>
+                      {tr.dent && (
+                        <span className="px-1.5 py-0.2 rounded text-[10px] bg-teal-100 text-teal-800 font-semibold">
+                          D{tr.dent}
+                        </span>
+                      )}
+                      {tr.traitementId ? (
+                        <span className="text-[10px] text-slate-400 group-hover:text-slate-600">
+                          (En cours)
+                        </span>
+                      ) : (
+                        <span className="text-[10px] text-emerald-600 font-medium">
+                          (Nouveau)
+                        </span>
+                      )}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handlePromptDelete(
+                            "traitementTab",
+                            idx,
+                            "Retirer ce soin",
+                            `Êtes-vous sûr de vouloir retirer le soin "${tr.description}" de cette consultation ?`,
+                          );
+                        }}
+                        className="ml-1 p-0.5 rounded text-slate-400 hover:text-red-600 hover:bg-red-50 transition"
+                        title="Retirer ce soin"
+                      >
+                        <X size={13} />
+                      </button>
+                    </div>
+                  );
+                })}
+
+                {/* Bouton '+' pour ajouter un autre soin */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    fetchPatientTraitements();
+                    setShowAddTreatmentDialog(true);
+                  }}
+                  className="flex items-center gap-1 px-3 py-2 text-xs font-semibold text-teal-700 hover:bg-teal-100/80 rounded-lg transition ml-2 mb-1"
+                  title="Ajouter un autre soin à cette consultation"
+                >
+                  <Plus size={14} />
+                  <span>Ajouter un soin</span>
+                </button>
+              </div>
+
+              {/* CONTENU DE L'ONGLET ACTIF */}
+              {form.traitements[activeTreatmentIndex] && (() => {
+                const tr = form.traitements[activeTreatmentIndex];
+                return (
+                  <div className="p-5 space-y-4">
+                    {/* Bannière d'info du soin */}
+                    <div className="flex flex-wrap items-center justify-between gap-3 p-3.5 bg-slate-50 border border-slate-200/80 rounded-xl text-xs">
+                      <div className="flex items-center gap-3">
+                        <span className="font-semibold text-slate-900 text-sm">
+                          {tr.description}
+                        </span>
+                        {tr.dent && (
+                          <span className="px-2 py-0.5 rounded-full bg-teal-100 text-teal-800 font-semibold">
+                            Dent {tr.dent}
+                          </span>
+                        )}
+                        <span
+                          className={`px-2 py-0.5 rounded-full font-medium ${
+                            tr.traitementId
+                              ? "bg-slate-200 text-slate-800"
+                              : "bg-emerald-100 text-emerald-800"
+                          }`}
+                        >
+                          {tr.traitementId ? "Traitement suivi" : "Nouveau plan de traitement"}
+                        </span>
+                      </div>
+
+                      {tr.traitementId ? (
+                        <div className="flex items-center gap-4 text-xs">
+                          <div>
+                            <span className="text-slate-500">Prix total : </span>
+                            <span className="font-semibold text-slate-800">
+                              {Number(tr.prixTotal).toLocaleString("fr-FR")} DZD
+                            </span>
+                          </div>
+                          <div>
+                            <span className="text-slate-500">Déjà réglé : </span>
+                            <span className="font-semibold text-emerald-700">
+                              {Number(tr.totalPaye).toLocaleString("fr-FR")} DZD
+                            </span>
+                          </div>
+                          <div>
+                            <span className="text-slate-500">Reste : </span>
+                            <span className="font-bold text-amber-700">
+                              {Number(tr.resteAPayer).toLocaleString("fr-FR")} DZD
+                            </span>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-4 text-xs">
+                          <div>
+                            <span className="text-slate-500">Prix estimé : </span>
+                            <span className="font-bold text-slate-800">
+                              {Number(tr.prixTotal).toLocaleString("fr-FR")} DZD
+                            </span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Champ Requis : Acte réalisé lors de la séance */}
+                    <div>
+                      <label className="block text-xs font-bold text-slate-800 mb-1.5 uppercase tracking-wider">
+                        Acte réalisé lors de cette séance <span className="text-red-500">*</span>
+                      </label>
+                      <textarea
+                        rows={3}
+                        required
+                        value={tr.acteRealise || ""}
+                        onChange={(e) =>
+                          updateActiveTreatment({ acteRealise: e.target.value })
+                        }
+                        placeholder="Ex: Alésage canalaire et irrigation, mise en place d'un pansement provisoire..."
+                        className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-teal-400 bg-white shadow-sm"
+                      />
+                    </div>
+
+                    {/* Champs Optionnels : Versement & Prochain rendez-vous */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
+                      {/* --- OPTIONNEL 1: VERSEMENT / PAIEMENT DE SÉANCE --- */}
+                      <div
+                        className={`rounded-xl border transition-all p-3.5 ${
+                          tr.hasVersement || tr.versementMontant
+                            ? "bg-emerald-50/60 border-emerald-300 shadow-sm"
+                            : "bg-slate-50/60 border-slate-200 opacity-70"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between mb-2.5">
+                          <label className="flex items-center gap-2 cursor-pointer select-none">
+                            <input
+                              type="checkbox"
+                              checked={Boolean(tr.hasVersement || tr.versementMontant)}
+                              onChange={(e) => {
+                                const checked = e.target.checked;
+                                updateActiveTreatment({
+                                  hasVersement: checked,
+                                  versementMontant: checked ? tr.versementMontant || "" : "",
+                                  versementNote: checked ? tr.versementNote || "" : "",
+                                });
+                              }}
+                              className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 w-4 h-4"
+                            />
+                            <span
+                              className={`text-xs font-semibold flex items-center gap-1.5 ${
+                                tr.hasVersement || tr.versementMontant ? "text-emerald-900" : "text-slate-600"
+                              }`}
+                            >
+                              <DollarSign size={14} className={tr.hasVersement || tr.versementMontant ? "text-emerald-700" : "text-slate-400"} />
+                              Versement de séance (Optionnel)
+                            </span>
+                          </label>
+                          {!(tr.hasVersement || tr.versementMontant) ? (
+                            <button
+                              type="button"
+                              onClick={() => updateActiveTreatment({ hasVersement: true })}
+                              className="text-[10px] font-medium text-slate-500 hover:text-emerald-700 bg-slate-200/70 hover:bg-emerald-100 px-2 py-0.5 rounded-full transition"
+                            >
+                              + Activer
+                            </button>
+                          ) : (
+                            <span className="text-[10px] font-medium text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full">
+                              Activé
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="space-y-2">
+                          <div>
+                            <label className="block text-[11px] font-medium text-slate-600 mb-1">
+                              Montant versé (DZD)
+                            </label>
+                            <Input
+                              type="number"
+                              min="0"
+                              step="100"
+                              disabled={!(tr.hasVersement || tr.versementMontant)}
+                              value={tr.versementMontant || ""}
+                              onChange={(e) => {
+                                updateActiveTreatment({
+                                  hasVersement: true,
+                                  versementMontant: e.target.value,
+                                });
+                              }}
+                              placeholder="0"
+                              className={`h-9 text-xs rounded-lg transition ${
+                                tr.hasVersement || tr.versementMontant
+                                  ? "bg-white border-emerald-300 focus:ring-emerald-400"
+                                  : "bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed"
+                              }`}
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-[11px] font-medium text-slate-600 mb-1">
+                              Note / Mode de règlement
+                            </label>
+                            <Input
+                              type="text"
+                              disabled={!(tr.hasVersement || tr.versementMontant)}
+                              value={tr.versementNote || ""}
+                              onChange={(e) => {
+                                updateActiveTreatment({
+                                  hasVersement: true,
+                                  versementNote: e.target.value,
+                                });
+                              }}
+                              placeholder="Ex: Espèces, Acompte séance..."
+                              className={`h-9 text-xs rounded-lg transition ${
+                                tr.hasVersement || tr.versementMontant
+                                  ? "bg-white border-emerald-300 focus:ring-emerald-400"
+                                  : "bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed"
+                              }`}
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* --- OPTIONNEL 2: PROCHAIN RENDEZ-VOUS POUR CE SOIN --- */}
+                      <div
+                        className={`rounded-xl border transition-all p-3.5 ${
+                          tr.hasRendezVous || tr.rendezVousDate
+                            ? "bg-amber-50/60 border-amber-300 shadow-sm"
+                            : "bg-slate-50/60 border-slate-200 opacity-70"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between mb-2.5">
+                          <label className="flex items-center gap-2 cursor-pointer select-none">
+                            <input
+                              type="checkbox"
+                              checked={Boolean(tr.hasRendezVous || tr.rendezVousDate)}
+                              onChange={(e) => {
+                                const checked = e.target.checked;
+                                updateActiveTreatment({
+                                  hasRendezVous: checked,
+                                  rendezVousDate: checked ? tr.rendezVousDate || "" : "",
+                                  rendezVousDescription: checked ? tr.rendezVousDescription || "" : "",
+                                });
+                              }}
+                              className="rounded border-slate-300 text-amber-600 focus:ring-amber-500 w-4 h-4"
+                            />
+                            <span
+                              className={`text-xs font-semibold flex items-center gap-1.5 ${
+                                tr.hasRendezVous || tr.rendezVousDate ? "text-amber-900" : "text-slate-600"
+                              }`}
+                            >
+                              <Calendar size={14} className={tr.hasRendezVous || tr.rendezVousDate ? "text-amber-700" : "text-slate-400"} />
+                              Prochain rendez-vous pour ce soin (Optionnel)
+                            </span>
+                          </label>
+                          {!(tr.hasRendezVous || tr.rendezVousDate) ? (
+                            <button
+                              type="button"
+                              onClick={() => updateActiveTreatment({ hasRendezVous: true })}
+                              className="text-[10px] font-medium text-slate-500 hover:text-amber-700 bg-slate-200/70 hover:bg-amber-100 px-2 py-0.5 rounded-full transition"
+                            >
+                              + Activer
+                            </button>
+                          ) : (
+                            <span className="text-[10px] font-medium text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full">
+                              Activé
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="space-y-2">
+                          <div>
+                            <label className="block text-[11px] font-medium text-slate-600 mb-1">
+                              Date et heure
+                            </label>
+                            <Input
+                              type="datetime-local"
+                              disabled={!(tr.hasRendezVous || tr.rendezVousDate)}
+                              value={tr.rendezVousDate || ""}
+                              onChange={(e) => {
+                                updateActiveTreatment({
+                                  hasRendezVous: true,
+                                  rendezVousDate: e.target.value,
+                                });
+                              }}
+                              className={`h-9 text-xs rounded-lg transition ${
+                                tr.hasRendezVous || tr.rendezVousDate
+                                  ? "bg-white border-amber-300 focus:ring-amber-400"
+                                  : "bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed"
+                              }`}
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-[11px] font-medium text-slate-600 mb-1">
+                              Description / Objet de la prochaine séance
+                            </label>
+                            <Input
+                              type="text"
+                              disabled={!(tr.hasRendezVous || tr.rendezVousDate)}
+                              value={tr.rendezVousDescription || ""}
+                              onChange={(e) => {
+                                updateActiveTreatment({
+                                  hasRendezVous: true,
+                                  rendezVousDescription: e.target.value,
+                                });
+                              }}
+                              placeholder="Ex: Obturation définitive composite..."
+                              className={`h-9 text-xs rounded-lg transition ${
+                                tr.hasRendezVous || tr.rendezVousDate
+                                  ? "bg-white border-amber-300 focus:ring-amber-400"
+                                  : "bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed"
+                              }`}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+          )}
+        </div>
+
         {/* ====================== */}
         {/* 💾 BOUTON ENREGISTRER */}
         {/* ====================== */}
@@ -927,6 +1593,227 @@ export default function NewConsultationPage({
               </Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* ======================================================== */}
+      {/* 🦷 MODAL : AJOUTER UN SOIN (EXISTANT OU NOUVEAU) */}
+      {/* ======================================================== */}
+      <Dialog
+        open={showAddTreatmentDialog}
+        onOpenChange={(open) => setShowAddTreatmentDialog(open)}
+      >
+        <DialogContent className="sm:max-w-lg rounded-2xl p-6">
+          <DialogHeader className="text-left mb-2">
+            <DialogTitle className="text-xl font-bold text-slate-900 flex items-center gap-2">
+              <Activity className="w-5 h-5 text-teal-600" />
+              Ajouter un soin dentaire
+            </DialogTitle>
+            <DialogDescription className="text-xs text-slate-500">
+              Choisissez un soin en cours de ce patient ou initialisez un nouveau traitement dentaire.
+            </DialogDescription>
+          </DialogHeader>
+
+          {/* Sélecteur de mode : Existant vs Nouveau */}
+          <div className="flex bg-slate-100 p-1 rounded-xl mb-4 text-xs font-semibold">
+            <button
+              type="button"
+              onClick={() => setAddTreatmentMode("existing")}
+              className={`flex-1 py-2 rounded-lg transition-all ${
+                addTreatmentMode === "existing"
+                  ? "bg-white text-teal-700 shadow-sm"
+                  : "text-slate-600 hover:text-slate-900"
+              }`}
+            >
+              Traitement en cours ({patientTraitements.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setAddTreatmentMode("new")}
+              className={`flex-1 py-2 rounded-lg transition-all ${
+                addTreatmentMode === "new"
+                  ? "bg-white text-teal-700 shadow-sm"
+                  : "text-slate-600 hover:text-slate-900"
+              }`}
+            >
+              + Nouveau traitement
+            </button>
+          </div>
+
+          {addTreatmentMode === "existing" ? (
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                  Sélectionner un traitement en cours *
+                </label>
+                {loadingTraitements ? (
+                  <div className="flex items-center gap-2 p-3 bg-slate-50 rounded-xl text-xs text-slate-500">
+                    <Loader2 className="w-4 h-4 animate-spin text-teal-600" />
+                    Chargement des traitements...
+                  </div>
+                ) : patientTraitements.length === 0 ? (
+                  <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800 flex items-center justify-between">
+                    <span>
+                      Aucun traitement en cours pour ce patient.
+                    </span>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setAddTreatmentMode("new")}
+                      className="text-xs bg-white text-amber-900"
+                    >
+                      + Nouveau
+                    </Button>
+                  </div>
+                ) : (
+                  <select
+                    value={selectedExistingId}
+                    onChange={(e) => setSelectedExistingId(e.target.value)}
+                    className="w-full h-11 px-3 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400 bg-white"
+                  >
+                    <option value="">
+                      -- Choisissez un traitement ({patientTraitements.length}) --
+                    </option>
+                    {patientTraitements.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.description} {t.dent ? `(Dent ${t.dent})` : ""} - Reste:{" "}
+                        {Number(t.resteAPayer).toLocaleString("fr-FR")} DZD
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
+
+              {/* Aperçu du traitement sélectionné */}
+              {selectedExistingId && (() => {
+                const sel = patientTraitements.find(
+                  (t) => t.id === Number(selectedExistingId),
+                );
+                if (!sel) return null;
+                return (
+                  <div className="p-3 bg-teal-50/70 border border-teal-200 rounded-xl text-xs text-teal-900 grid grid-cols-3 gap-2 text-center">
+                    <div>
+                      <span className="text-slate-500 block">Prix Total</span>
+                      <span className="font-bold text-slate-800">
+                        {Number(sel.prixTotal).toLocaleString("fr-FR")} DZD
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-slate-500 block">Déjà payé</span>
+                      <span className="font-bold text-emerald-600">
+                        {Number(sel.totalPaye).toLocaleString("fr-FR")} DZD
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-slate-500 block">Reste</span>
+                      <span className="font-bold text-amber-700">
+                        {Number(sel.resteAPayer).toLocaleString("fr-FR")} DZD
+                      </span>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              <DialogFooter className="mt-4 flex justify-end gap-2 pt-2 border-t border-slate-100">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setShowAddTreatmentDialog(false)}
+                  className="rounded-xl text-xs"
+                >
+                  Annuler
+                </Button>
+                <Button
+                  type="button"
+                  disabled={!selectedExistingId}
+                  onClick={handleAddExistingTreatment}
+                  className="bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs"
+                >
+                  Ajouter cet onglet de soin
+                </Button>
+              </DialogFooter>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div className="md:col-span-2">
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    Description du soin *
+                  </label>
+                  <Input
+                    type="text"
+                    required
+                    placeholder="Ex: Soin carie, Dévitalisation, Pose couronne..."
+                    value={newTreatmentFields.description}
+                    onChange={(e) =>
+                      setNewTreatmentFields((prev) => ({
+                        ...prev,
+                        description: e.target.value,
+                      }))
+                    }
+                    className="h-10 rounded-xl bg-white text-xs"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    N° Dent
+                  </label>
+                  <Input
+                    type="text"
+                    placeholder="Ex: 16, 24, 36..."
+                    value={newTreatmentFields.dent}
+                    onChange={(e) =>
+                      setNewTreatmentFields((prev) => ({
+                        ...prev,
+                        dent: e.target.value,
+                      }))
+                    }
+                    className="h-10 rounded-xl bg-white text-xs"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Prix Total Estimé (DZD) *
+                </label>
+                <Input
+                  type="number"
+                  min="0"
+                  step="100"
+                  placeholder="Ex: 15000"
+                  value={newTreatmentFields.prixTotal}
+                  onChange={(e) =>
+                    setNewTreatmentFields((prev) => ({
+                      ...prev,
+                      prixTotal: e.target.value,
+                    }))
+                  }
+                  className="h-10 rounded-xl bg-white text-xs"
+                />
+              </div>
+
+              <DialogFooter className="mt-4 flex justify-end gap-2 pt-2 border-t border-slate-100">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setShowAddTreatmentDialog(false)}
+                  className="rounded-xl text-xs"
+                >
+                  Annuler
+                </Button>
+                <Button
+                  type="button"
+                  disabled={!newTreatmentFields.description.trim()}
+                  onClick={handleAddNewTreatment}
+                  className="bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs"
+                >
+                  Créer et ajouter cet onglet
+                </Button>
+              </DialogFooter>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
 

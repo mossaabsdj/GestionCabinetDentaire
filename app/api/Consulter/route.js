@@ -32,7 +32,16 @@ export async function GET(req) {
         },
         justificationRecord: true,
         patient: { select: { id: true, nom: true } },
-        rendezVous: { select: { id: true, date: true, description: true } }, // ✅ new relation
+        rendezVous: { select: { id: true, date: true, description: true } },
+        consultationsTraitement: {
+          include: {
+            traitement: {
+              include: {
+                versements: true,
+              },
+            },
+          },
+        },
       },
       orderBy: { createdAt: "desc" },
     });
@@ -56,12 +65,13 @@ export async function POST(req) {
 
     const consultDate = data.createdAt ? new Date(data.createdAt) : new Date();
 
-    // ✅ Auto-create RendezVous if not provided
+    // Auto-create RendezVous if provided at top-level
     let rendezVousId = data.rendezVousId ? Number(data.rendezVousId) : null;
 
     if (!rendezVousId && data.rendezVousDate) {
       const rendezVous = await prisma.rendezVous.create({
         data: {
+          patientId: Number(data.patientId),
           date: new Date(data.rendezVousDate),
           description: data.rendezVousDescription || "Consultation programmée",
         },
@@ -69,122 +79,204 @@ export async function POST(req) {
       rendezVousId = rendezVous.id;
     }
 
-    const consultation = await prisma.consultation.create({
-      data: {
-        patientId: data.patientId,
-        note: data.note,
-        createdAt: consultDate,
-        motifDeConsultation: data.motifDeConsultation || null,
-        justification:
-          typeof data.justification === "string" ? data.justification : null,
-        rendezVousId, // ✅ now always set if date given
+    const consultation = await prisma.$transaction(async (tx) => {
+      const createdConsult = await tx.consultation.create({
+        data: {
+          patientId: Number(data.patientId),
+          note: data.note,
+          createdAt: consultDate,
+          motifDeConsultation: data.motifDeConsultation || null,
+          justification:
+            typeof data.justification === "string" ? data.justification : null,
+          rendezVousId,
 
-        // ✅ Justification
-        justificationRecord:
-          data.justificationRecord ||
-          (typeof data.justification === "object" &&
-            data.justification !== null)
+          // Justification
+          justificationRecord:
+            data.justificationRecord ||
+            (typeof data.justification === "object" &&
+              data.justification !== null)
+              ? {
+                  create: {
+                    patientId: Number(data.patientId),
+                    createdAt: data.createdAt
+                      ? new Date(data.createdAt)
+                      : undefined,
+                    titre:
+                      (data.justificationRecord || data.justification).titre ||
+                      null,
+                    texte:
+                      (data.justificationRecord || data.justification).texte ||
+                      "",
+                    duree:
+                      (data.justificationRecord || data.justification).duree ||
+                      null,
+                    dateDebut: (data.justificationRecord || data.justification)
+                      .dateDebut
+                      ? new Date(
+                          (data.justificationRecord || data.justification)
+                            .dateDebut,
+                        )
+                      : undefined,
+                    dateFin: (data.justificationRecord || data.justification)
+                      .dateFin
+                      ? new Date(
+                          (data.justificationRecord || data.justification)
+                            .dateFin,
+                        )
+                      : undefined,
+                  },
+                }
+              : undefined,
+
+          // Ordonnance
+          ordonnance: data.ordonnance
             ? {
                 create: {
-                  patientId: Number(data.patientId),
                   createdAt: data.createdAt
                     ? new Date(data.createdAt)
                     : undefined,
-                  titre:
-                    (data.justificationRecord || data.justification).titre ||
-                    null,
-                  texte:
-                    (data.justificationRecord || data.justification).texte ||
-                    "",
-                  duree:
-                    (data.justificationRecord || data.justification).duree ||
-                    null,
-                  dateDebut: (data.justificationRecord || data.justification)
-                    .dateDebut
-                    ? new Date(
-                        (data.justificationRecord || data.justification)
-                          .dateDebut,
-                      )
-                    : undefined,
-                  dateFin: (data.justificationRecord || data.justification)
-                    .dateFin
-                    ? new Date(
-                        (data.justificationRecord || data.justification)
-                          .dateFin,
-                      )
-                    : undefined,
-                },
-              }
-            : undefined,
 
-        // ✅ Ordonnance
-        ordonnance: data.ordonnance
-          ? {
-              create: {
-                createdAt: data.createdAt
-                  ? new Date(data.createdAt)
-                  : undefined,
-
-                patientId: data.patientId,
-                items: {
-                  create: data.ordonnance.items.map((item) => ({
-                    medicamentId: item.medicamentId,
-                    dosage: item.dosage,
-                    frequence: item.frequence,
-                    duree: item.duree,
-                    quantite: parseInt(item.quantite) || 0,
-                  })),
-                },
-              },
-            }
-          : undefined,
-
-        // ✅ BilanRecip
-        bilanRecip: data.bilanRecip
-          ? {
-              create: {
-                createdAt: data.createdAt
-                  ? new Date(data.createdAt)
-                  : undefined,
-
-                patientId: data.patientId,
-                items: {
-                  create: data.bilanRecip.items.map((item) => ({
-                    bilanId: item.bilanId,
-                    resultat: item.resultat,
-                    remarque: item.remarque,
-                  })),
-                },
-              },
-            }
-          : undefined,
-
-        // ✅ Radios
-        radios:
-          data.radios && Array.isArray(data.radios) && data.radios.length > 0
-            ? {
-                create: data.radios.map((r) => ({
                   patientId: Number(data.patientId),
-                  description: r.description || null,
-                  fichier: r.fichier || null,
-                })),
+                  items: {
+                    create: data.ordonnance.items.map((item) => ({
+                      medicamentId: item.medicamentId,
+                      dosage: item.dosage,
+                      frequence: item.frequence,
+                      duree: item.duree,
+                      quantite: parseInt(item.quantite) || 0,
+                    })),
+                  },
+                },
               }
             : undefined,
-      },
-      include: {
-        ordonnance: { include: { items: true } },
-        bilanRecip: { include: { items: true } },
-        justificationRecord: true,
-        radios: true,
-        rendezVous: true,
-      },
+
+          // BilanRecip
+          bilanRecip: data.bilanRecip
+            ? {
+                create: {
+                  createdAt: data.createdAt
+                    ? new Date(data.createdAt)
+                    : undefined,
+
+                  patientId: Number(data.patientId),
+                  items: {
+                    create: data.bilanRecip.items.map((item) => ({
+                      bilanId: item.bilanId,
+                      resultat: item.resultat,
+                      remarque: item.remarque,
+                    })),
+                  },
+                },
+              }
+            : undefined,
+
+          // Radios
+          radios:
+            data.radios && Array.isArray(data.radios) && data.radios.length > 0
+              ? {
+                  create: data.radios.map((r) => ({
+                    patientId: Number(data.patientId),
+                    description: r.description || null,
+                    fichier: r.fichier || null,
+                  })),
+                }
+              : undefined,
+        },
+      });
+
+      // Handle attached treatments
+      if (Array.isArray(data.traitements) && data.traitements.length > 0) {
+        for (const tr of data.traitements) {
+          let targetTraitementId = tr.traitementId
+            ? Number(tr.traitementId)
+            : null;
+
+          // If new treatment creation requested
+          if (!targetTraitementId && tr.nouveauTraitement) {
+            const newT = await tx.traitement.create({
+              data: {
+                patientId: Number(data.patientId),
+                description: tr.nouveauTraitement.description.trim(),
+                dent: tr.nouveauTraitement.dent?.trim() || null,
+                prixTotal: parseFloat(tr.nouveauTraitement.prixTotal) || 0,
+                statut: tr.nouveauTraitement.statut || "EN_COURS",
+              },
+            });
+            targetTraitementId = newT.id;
+          }
+
+          if (targetTraitementId) {
+            // Create session link with act performed
+            await tx.consultationTraitement.create({
+              data: {
+                consultationId: createdConsult.id,
+                traitementId: targetTraitementId,
+                acteRealise: tr.acteRealise?.trim() || null,
+              },
+            });
+
+            // Optional session versement
+            if (tr.versement && Number(tr.versement.montant) > 0) {
+              const montant = parseFloat(tr.versement.montant);
+              await tx.paiement.create({
+                data: {
+                  patientId: Number(data.patientId),
+                  traitementId: targetTraitementId,
+                  montant,
+                  note:
+                    tr.versement.note?.trim() ||
+                    `Séance consultation #${createdConsult.id}`,
+                  date: tr.versement.date
+                    ? new Date(tr.versement.date)
+                    : consultDate,
+                },
+              });
+            }
+
+            // Optional next appointment for this treatment
+            if (tr.rendezVous && tr.rendezVous.date) {
+              await tx.rendezVous.create({
+                data: {
+                  patientId: Number(data.patientId),
+                  traitementId: targetTraitementId,
+                  date: new Date(tr.rendezVous.date),
+                  description:
+                    tr.rendezVous.description?.trim() ||
+                    `Prochaine séance de soin`,
+                  note: tr.rendezVous.note?.trim() || null,
+                },
+              });
+            }
+          }
+        }
+      }
+
+      return await tx.consultation.findUnique({
+        where: { id: createdConsult.id },
+        include: {
+          ordonnance: { include: { items: true } },
+          bilanRecip: { include: { items: true } },
+          justificationRecord: true,
+          radios: true,
+          rendezVous: true,
+          consultationsTraitement: {
+            include: {
+              traitement: {
+                include: {
+                  versements: true,
+                },
+              },
+            },
+          },
+        },
+      });
     });
 
     return NextResponse.json(consultation);
   } catch (error) {
     console.error("POST consultation error:", error);
     return NextResponse.json(
-      { error: "Failed to create consultation" },
+      { error: error?.message || "Failed to create consultation" },
       { status: 500 },
     );
   }
@@ -369,6 +461,9 @@ export async function DELETE(req) {
       }),
       prisma.ordonnance.deleteMany({ where: { consultationId: Number(id) } }),
       prisma.bilanRecip.deleteMany({ where: { consultationId: Number(id) } }),
+      prisma.consultationTraitement.deleteMany({
+        where: { consultationId: Number(id) },
+      }),
       prisma.consultation.delete({ where: { id: Number(id) } }),
     ]);
 

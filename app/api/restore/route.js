@@ -427,6 +427,33 @@ export async function POST(req) {
         }
 
         // 15. Paiements
+        // 14.5 Traitements
+        if (Array.isArray(data.traitements)) {
+          for (const t of data.traitements) {
+            await tx.traitement.upsert({
+              where: { id: t.id || 0 },
+              update: {
+                patientId: t.patientId,
+                description: t.description,
+                dent: t.dent ?? null,
+                prixTotal: parseFloat(t.prixTotal) || 0,
+                statut: t.statut || "EN_COURS",
+                createdAt: new Date(t.createdAt || Date.now()),
+              },
+              create: {
+                ...(t.id ? { id: t.id } : {}),
+                patientId: t.patientId,
+                description: t.description,
+                dent: t.dent ?? null,
+                prixTotal: parseFloat(t.prixTotal) || 0,
+                statut: t.statut || "EN_COURS",
+                createdAt: new Date(t.createdAt || Date.now()),
+              },
+            });
+          }
+        }
+
+        // 15. Paiements
         if (Array.isArray(data.paiements)) {
           for (const p of data.paiements) {
             if (p.patientId && p.montant !== undefined) {
@@ -434,13 +461,17 @@ export async function POST(req) {
                 where: { id: p.id || 0 },
                 update: {
                   patientId: p.patientId,
+                  traitementId: p.traitementId ?? null,
                   montant: parseFloat(p.montant),
+                  note: p.note ?? null,
                   date: new Date(p.date || Date.now()),
                 },
                 create: {
                   ...(p.id ? { id: p.id } : {}),
                   patientId: p.patientId,
+                  traitementId: p.traitementId ?? null,
                   montant: parseFloat(p.montant),
+                  note: p.note ?? null,
                   date: new Date(p.date || Date.now()),
                 },
               });
@@ -492,6 +523,28 @@ export async function POST(req) {
                 description: bf.description ?? null,
                 fichier: bf.fichier ?? null,
                 createdAt: new Date(bf.createdAt || Date.now()),
+              },
+            });
+          }
+        }
+
+        // 17. ConsultationsTraitement
+        if (Array.isArray(data.consultationsTraitement)) {
+          for (const ct of data.consultationsTraitement) {
+            await tx.consultationTraitement.upsert({
+              where: { id: ct.id || 0 },
+              update: {
+                consultationId: ct.consultationId,
+                traitementId: ct.traitementId,
+                acteRealise: ct.acteRealise ?? null,
+                createdAt: new Date(ct.createdAt || Date.now()),
+              },
+              create: {
+                ...(ct.id ? { id: ct.id } : {}),
+                consultationId: ct.consultationId,
+                traitementId: ct.traitementId,
+                acteRealise: ct.acteRealise ?? null,
+                createdAt: new Date(ct.createdAt || Date.now()),
               },
             });
           }

@@ -40,6 +40,39 @@ export async function GET(request) {
               },
               radios: true,
               bilansFiles: true,
+              consultationsTraitement: {
+                include: {
+                  traitement: {
+                    include: {
+                      versements: true,
+                    },
+                  },
+                },
+              },
+            },
+          },
+          traitements: {
+            orderBy: { createdAt: "desc" },
+            include: {
+              versements: {
+                orderBy: { date: "desc" },
+              },
+              rendezVous: {
+                orderBy: { date: "asc" },
+              },
+              consultationsTraitement: {
+                orderBy: { createdAt: "desc" },
+                include: {
+                  consultation: {
+                    select: {
+                      id: true,
+                      createdAt: true,
+                      motifDeConsultation: true,
+                      note: true,
+                    },
+                  },
+                },
+              },
             },
           },
           ordonnances: {
@@ -60,6 +93,17 @@ export async function GET(request) {
           },
           paiements: {
             orderBy: { date: "desc" },
+            include: {
+              traitement: {
+                select: {
+                  id: true,
+                  description: true,
+                  dent: true,
+                  prixTotal: true,
+                  statut: true,
+                },
+              },
+            },
           },
           vaccinations: {
             orderBy: { dateGiven: "desc" },
@@ -86,7 +130,38 @@ export async function GET(request) {
         );
       }
 
-      return NextResponse.json(patient);
+      // Compute financial summary
+      const traitementsEnriched = (patient.traitements || []).map((t) => {
+        const totalPaye = (t.versements || []).reduce(
+          (sum, v) => sum + (Number(v.montant) || 0),
+          0
+        );
+        const resteAPayer = Math.max(0, (Number(t.prixTotal) || 0) - totalPaye);
+        return {
+          ...t,
+          totalPaye,
+          resteAPayer,
+        };
+      });
+
+      const totalDu = traitementsEnriched
+        .filter((t) => t.statut !== "ANNULE")
+        .reduce((sum, t) => sum + (Number(t.prixTotal) || 0), 0);
+
+      const totalPaye = (patient.paiements || []).reduce(
+        (sum, p) => sum + (Number(p.montant) || 0),
+        0
+      );
+
+      const detteRestante = Math.max(0, totalDu - totalPaye);
+
+      return NextResponse.json({
+        ...patient,
+        traitements: traitementsEnriched,
+        totalDu,
+        totalPaye,
+        detteRestante,
+      });
     } else {
       // Fetch all patients
       const patients = await prisma.patient.findMany({

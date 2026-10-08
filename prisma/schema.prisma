@@ -27,6 +27,12 @@ enum GroupeSanguin {
   O_NEG
 }
 
+enum StatutTraitement {
+  EN_COURS
+  TERMINE
+  ANNULE
+}
+
 // ====================
 // Main Models
 // ====================
@@ -42,6 +48,8 @@ model Patient {
   antecedents      String?
   groupeSanguin    GroupeSanguin?
   consultations    Consultation[]
+  traitements      Traitement[]
+  rendezVous       RendezVous[]
   ordonnances      Ordonnance[]
   bilans           BilanRecip[]
   paiements        Paiement[]
@@ -53,27 +61,34 @@ model Patient {
 }
 
 model Consultation {
-  id                        Int           @id @default(autoincrement())
+  id                        Int                      @id @default(autoincrement())
   patientId                 Int
-  patient                   Patient       @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  patient                   Patient                  @relation(fields: [patientId], references: [id], onDelete: Cascade)
   note                      String?
   radios                    Radio[]
   bilansFiles               BilanFile[]
   ordonnance                Ordonnance?
   bilanRecip                BilanRecip?
   justificationRecord       Justification?
-  createdAt                 DateTime      @default(now())
+  consultationsTraitement   ConsultationTraitement[]
+  createdAt                 DateTime                 @default(now())
   motifDeConsultation       String?
   justification             String?
   rendezVousId              Int?
-  rendezVous                RendezVous?   @relation(fields: [rendezVousId], references: [id], onDelete: SetNull)
+  rendezVous                RendezVous?              @relation(fields: [rendezVousId], references: [id], onDelete: SetNull)
 }
 
 model RendezVous {
   id            Int            @id @default(autoincrement())
   date          DateTime
   description   String?
+  note          String?
+  patientId     Int?
+  patient       Patient?       @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  traitementId  Int?
+  traitement    Traitement?    @relation(fields: [traitementId], references: [id], onDelete: SetNull)
   consultations Consultation[]
+  createdAt     DateTime       @default(now())
 }
 
 model Radio {
@@ -211,15 +226,48 @@ model RecetteTypeItem {
 }
 
 // ====================
-// Paiements
+// Traitements & ConsultationTraitement
+// ====================
+
+model Traitement {
+  id                      Int                      @id @default(autoincrement())
+  patientId               Int
+  patient                 Patient                  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  description             String
+  dent                    String?
+  prixTotal               Float                    @default(0)
+  statut                  StatutTraitement         @default(EN_COURS)
+  consultationsTraitement ConsultationTraitement[]
+  versements              Paiement[]               @relation("TraitementVersements")
+  rendezVous              RendezVous[]
+  createdAt               DateTime                 @default(now())
+  updatedAt               DateTime                 @updatedAt
+}
+
+model ConsultationTraitement {
+  id             Int          @id @default(autoincrement())
+  consultationId Int
+  consultation   Consultation @relation(fields: [consultationId], references: [id], onDelete: Cascade)
+  traitementId   Int
+  traitement     Traitement   @relation(fields: [traitementId], references: [id], onDelete: Cascade)
+  acteRealise    String?
+  createdAt      DateTime     @default(now())
+}
+
+// ====================
+// Paiements / Versements
 // ====================
 
 model Paiement {
-  id        Int      @id @default(autoincrement())
-  patientId Int
-  patient   Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
-  montant   Float
-  date      DateTime @default(now())
+  id           Int         @id @default(autoincrement())
+  patientId    Int
+  patient      Patient     @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  traitementId Int?
+  traitement   Traitement? @relation("TraitementVersements", fields: [traitementId], references: [id], onDelete: SetNull)
+  montant      Float
+  date         DateTime    @default(now())
+  note         String?
+  createdAt    DateTime    @default(now())
 }
 
 // ====================

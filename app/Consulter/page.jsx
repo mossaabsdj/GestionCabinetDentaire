@@ -21,6 +21,8 @@ import {
   Sparkles,
   Keyboard,
   Files,
+  DollarSign,
+  CreditCard,
 } from "lucide-react";
 
 import {
@@ -49,10 +51,13 @@ import { motion, AnimatePresence } from "framer-motion";
 import ModernSearchBar from "../component/SearchBar/SearchBar";
 import DatePickerFilter from "../component/DatePickerFilter/DatePickerFilter";
 import VisitsInfoModal from "@/app/component/Infomedical";
+import TraitementsTab from "@/app/component/Traitements/TraitementsTab";
+import FinancesPatientTab from "@/app/component/Finances/FinancesPatientTab";
 import { tabs } from "@heroui/theme";
 export default function PatientDashboard() {
   const searchRef = useRef();
   const [selectedPatient, setSelectedPatient] = useState();
+  const [preselectedTraitement, setPreselectedTraitement] = useState(null);
   const [search, setSearch] = useState("");
   const [files, setFiles] = useState([]);
   const [visitsinfo, setVisitsinfo] = useState(false);
@@ -182,7 +187,8 @@ export default function PatientDashboard() {
       formData?.ordonnance?.items?.length > 0 ||
       formData?.bilanRecip?.items?.length > 0 ||
       formData?.justification ||
-      formData?.radios?.length > 0;
+      formData?.radios?.length > 0 ||
+      formData?.traitements?.length > 0;
 
     if (!hasData) {
       // ❌ Replace alert with SweetAlert
@@ -229,6 +235,9 @@ export default function PatientDashboard() {
 
           // ✅ Radios
           radios: formData.radios || [],
+
+          // ✅ Traitements & actes de séance
+          traitements: formData.traitements || [],
 
           // ✅ Ordonnance
           ordonnance:
@@ -452,9 +461,9 @@ export default function PatientDashboard() {
   ];
 
   const medicalInfo = (selectedPatient) => {
-    if (!selectedPatient?.consultations?.length) return [];
+    if (!selectedPatient) return [];
 
-    const consultations = selectedPatient.consultations;
+    const consultations = selectedPatient.consultations || [];
     const lastIndex = consultations.length - 1;
 
     const getInfo = (attr, index) => {
@@ -464,22 +473,121 @@ export default function PatientDashboard() {
           return val;
         }
       }
-      return null; // return null instead of "—"
+      return null;
     };
 
-    const c = consultations[lastIndex];
+    const c = lastIndex >= 0 ? consultations[lastIndex] : null;
+
+    // 🦷 1. Traitements en cours
+    const traitements = selectedPatient.traitements || [];
+    const enCours = traitements.filter((t) => t.statut === "EN_COURS");
+    const enCoursText =
+      enCours.length > 0
+        ? `${enCours.length} soin(s) en cours : ${enCours
+            .map((t) => `${t.description}${t.dent ? ` (D${t.dent})` : ""}`)
+            .join(", ")}`
+        : "Aucun soin en cours";
+
+    // 🦷 2. Dernier traitement
+    const sortedTraitements = [...traitements].sort(
+      (a, b) => new Date(b.createdAt) - new Date(a.createdAt)
+    );
+    const lastTr = sortedTraitements[0];
+    let lastTrText = "Aucun traitement enregistré";
+    if (lastTr) {
+      const lastActe =
+        lastTr.consultationsTraitement?.[0]?.acteRealise ||
+        lastTr.acteRealise;
+      lastTrText = `${lastTr.description}${
+        lastTr.dent ? ` (Dent ${lastTr.dent})` : ""
+      }${lastActe ? ` — Acte : ${lastActe}` : ""}${
+        lastTr.createdAt
+          ? ` (le ${new Date(lastTr.createdAt).toLocaleDateString("fr-FR")})`
+          : ""
+      }`;
+    }
+
+    // 💰 3. Dernier versement
+    const allPaiements = [
+      ...(selectedPatient.paiements || []),
+      ...traitements.flatMap((t) => t.versements || []),
+    ].filter(
+      (p, idx, arr) => arr.findIndex((x) => x.id === p.id) === idx
+    );
+    allPaiements.sort(
+      (a, b) =>
+        new Date(b.date || b.createdAt) - new Date(a.date || a.createdAt)
+    );
+    const lastP = allPaiements[0];
+    const lastVersementText = lastP
+      ? `${Number(lastP.montant).toLocaleString("fr-FR")} DZD${
+          lastP.date
+            ? ` (le ${new Date(lastP.date).toLocaleDateString("fr-FR")})`
+            : ""
+        }${lastP.note ? ` - ${lastP.note}` : ""}`
+      : "0 DZD";
+
+    // 💳 4. Crédit / Solde restant
+    const totalDu =
+      selectedPatient.totalDu !== undefined
+        ? Number(selectedPatient.totalDu)
+        : traitements
+            .filter((t) => t.statut !== "ANNULE")
+            .reduce((sum, t) => sum + (Number(t.prixTotal) || 0), 0);
+
+    const totalPaye =
+      selectedPatient.totalPaye !== undefined
+        ? Number(selectedPatient.totalPaye)
+        : allPaiements.reduce(
+            (sum, p) => sum + (Number(p.montant) || 0),
+            0
+          );
+
+    const dette =
+      selectedPatient.detteRestante !== undefined
+        ? Number(selectedPatient.detteRestante)
+        : Math.max(0, totalDu - totalPaye);
+
+    const creditText =
+      dette > 0
+        ? `${dette.toLocaleString("fr-FR")} DZD (Reste à payer)`
+        : "0 DZD (En règle)";
 
     const fields = [
       {
+        icon: Activity,
+        label: "Traitements en cours",
+        value: enCoursText,
+        onClickTab: "Traitements",
+      },
+      {
+        icon: Sparkles,
+        label: "Dernier traitement",
+        value: lastTrText,
+        onClickTab: "Traitements",
+      },
+      {
+        icon: DollarSign,
+        label: "Dernier versement",
+        value: lastVersementText,
+        onClickTab: "Finances & Crédits",
+      },
+      {
+        icon: CreditCard,
+        label: "Crédit patient",
+        value: creditText,
+        onClickTab: "Finances & Crédits",
+      },
+      {
         icon: Stethoscope,
         label: "Motif de consultation",
-        value: getInfo("motifDeConsultation", lastIndex),
+        value: lastIndex >= 0 ? getInfo("motifDeConsultation", lastIndex) : null,
         type: "textarea",
       },
       {
         icon: ClipboardList,
         label: "Notes",
-        value: getInfo("note", lastIndex),
+        value: lastIndex >= 0 ? getInfo("note", lastIndex) : null,
         type: "textarea",
       },
       c?.rendezVous
@@ -859,7 +967,9 @@ export default function PatientDashboard() {
                 / Justification
               </Button>
             ) : selectedtab === "Visites" ||
-              selectedtab === "Informations Patient" ? (
+              selectedtab === "Informations Patient" ||
+              selectedtab === "Traitements" ||
+              selectedtab === "Finances & Crédits" ? (
               <Button
                 onClick={() => {
                   setNewConsultation(true);
@@ -891,6 +1001,8 @@ export default function PatientDashboard() {
         >
           {[
             "Informations Patient",
+            "Traitements",
+            "Finances & Crédits",
             "Analyses et Résultats",
             "Vaccinations",
             "Visites",
@@ -980,8 +1092,9 @@ export default function PatientDashboard() {
                           <button
                             type="button"
                             onClick={() => setVisitsinfo(true)}
-                            disabled={!date || !time}
+                            disabled={!selectedPatient?.id}
                             className="p-2 rounded-xl bg-[var(--color-500)] text-white shadow-sm hover:bg-[var(--color-700)] disabled:opacity-60 disabled:cursor-not-allowed transition-colors flex items-center justify-center"
+                            title="Historique des consultations"
                           >
                             <Files size={18} />
                           </button>
@@ -1000,7 +1113,9 @@ export default function PatientDashboard() {
                                   : ""
                               }
                               onClick={() => {
-                                if (
+                                if (info.onClickTab) {
+                                  setselectedtab(info.onClickTab);
+                                } else if (
                                   section.title === "Informations Médicales"
                                 ) {
                                   setVisitsinfo(true);
@@ -1024,7 +1139,6 @@ export default function PatientDashboard() {
                                 {[
                                   "Motif de consultation",
                                   "Notes",
-                                  "Développement Psychomoteur",
                                   "Antécédents",
                                 ].includes(info.label) ? (
                                   // Long text fields
@@ -1123,6 +1237,26 @@ export default function PatientDashboard() {
                   ))}
                 </>
               )}
+              {selectedtab === "Traitements" && (
+                <TraitementsTab
+                  selectedPatient={selectedPatient}
+                  patient={selectedPatient}
+                  patientId={selectedPatient?.id}
+                  onContinueTraitement={(traitement) => {
+                    setPreselectedTraitement(traitement);
+                    setselectedtab("+ Nouvelle Consultation");
+                  }}
+                  onRefresh={() => fetchPatientById(selectedPatient?.id)}
+                />
+              )}
+              {selectedtab === "Finances & Crédits" && (
+                <FinancesPatientTab
+                  selectedPatient={selectedPatient}
+                  patient={selectedPatient}
+                  patientId={selectedPatient?.id}
+                  onRefresh={() => fetchPatientById(selectedPatient?.id)}
+                />
+              )}
               {selectedtab === "+ Nouvelle Consultation" && (
                 <NewConsultationPage
                   onSave={setNewConsultationData}
@@ -1131,6 +1265,10 @@ export default function PatientDashboard() {
                   viderForm={viderForm}
                   openAddModal={openAddElementModal}
                   setOpenAddModal={setOpenAddElementModal}
+                  preselectedTraitement={preselectedTraitement}
+                  onClearPreselectedTraitement={() =>
+                    setPreselectedTraitement(null)
+                  }
                 />
               )}
               {selectedtab === "Analyses et Résultats" && (

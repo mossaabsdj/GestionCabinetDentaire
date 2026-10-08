@@ -515,6 +515,69 @@ export default function PatientVisits({
               {renderMedicalInfo(selectedVisit)}
 
               {/* ====================== */}
+              {/* 🦷 TRAITEMENTS & ACTES RÉALISÉS */}
+              {/* ====================== */}
+              {selectedVisit?.consultationsTraitement?.length > 0 && (
+                <div className="mt-5">
+                  <h3 className="text-[var(--color-700)] font-semibold text-sm sm:text-base flex items-center gap-2 mb-2">
+                    <Activity size={18} /> Soins dentaires & Actes réalisés lors de cette séance
+                  </h3>
+                  <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm border-collapse min-w-[500px]">
+                        <thead>
+                          <tr className="border-b bg-teal-50/70 text-slate-700">
+                            <th className="text-left p-3 font-semibold">Traitement</th>
+                            <th className="text-left p-3 font-semibold">Dent</th>
+                            <th className="text-left p-3 font-semibold">Acte réalisé lors de cette séance</th>
+                            <th className="text-left p-3 font-semibold">Statut</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {selectedVisit.consultationsTraitement.map((ct) => (
+                            <tr key={ct.id} className="hover:bg-slate-50/50">
+                              <td className="p-3 font-semibold text-slate-800">
+                                {ct.traitement?.description || "—"}
+                              </td>
+                              <td className="p-3 text-slate-700">
+                                {ct.traitement?.dent ? (
+                                  <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-teal-100 text-teal-800">
+                                    Dent {ct.traitement.dent}
+                                  </span>
+                                ) : (
+                                  "—"
+                                )}
+                              </td>
+                              <td className="p-3 text-slate-900 font-medium">
+                                {ct.acteRealise || "Soin / Contrôle"}
+                              </td>
+                              <td className="p-3">
+                                <span
+                                  className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${
+                                    ct.traitement?.statut === "TERMINE"
+                                      ? "bg-emerald-100 text-emerald-800"
+                                      : ct.traitement?.statut === "ANNULE"
+                                        ? "bg-rose-100 text-rose-800"
+                                        : "bg-blue-100 text-blue-800"
+                                  }`}
+                                >
+                                  {ct.traitement?.statut === "TERMINE"
+                                    ? "Terminé"
+                                    : ct.traitement?.statut === "ANNULE"
+                                      ? "Annulé"
+                                      : "En cours"}
+                                </span>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* ====================== */}
               {/* 🔬 BILAN RECIP (Analyses) */}
               {/* ====================== */}
               {selectedVisit?.bilanRecip?.items?.length > 0 && (
