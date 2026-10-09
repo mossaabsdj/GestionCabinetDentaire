@@ -139,7 +139,6 @@ export default function NewConsultationPage({
             ? selectedPatient.justification
             : selectedPatient.justification
               ? {
-                  titre: "Justification médicale",
                   texte: selectedPatient.justification,
                 }
               : null),
@@ -550,10 +549,51 @@ export default function NewConsultationPage({
     (hasJustification ? 1 : 0) +
     (form.radios?.length || 0) +
     (hasRendezVous ? 1 : 0);
+  function AttachedCard({
+    icon: Icon,
+    label,
+    badge,
+    onEdit,
+    onDelete,
+    editTitle,
+    deleteTitle,
+  }) {
+    return (
+      <div className="flex items-center justify-between gap-2 rounded-xl border border-slate-200 bg-white p-3 shadow-sm transition-colors hover:border-[var(--color-300)]">
+        <div className="flex min-w-0 items-center gap-3">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[var(--color-100)] text-[var(--color-700)]">
+            <Icon className="h-[18px] w-[18px]" />
+          </div>
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-slate-900">{label}</p>
+            <p className="truncate text-xs text-slate-500">{badge}</p>
+          </div>
+        </div>
 
+        <div className="flex shrink-0 items-center gap-0.5">
+          <button
+            type="button"
+            onClick={onEdit}
+            title={editTitle}
+            className="rounded-lg p-1.5 text-slate-400 transition hover:bg-[var(--color-50)] hover:text-[var(--color-700)]"
+          >
+            <Edit3 size={15} />
+          </button>
+          <button
+            type="button"
+            onClick={onDelete}
+            title={deleteTitle}
+            className="rounded-lg p-1.5 text-slate-400 transition hover:bg-red-50 hover:text-red-600"
+          >
+            <Trash2 size={15} />
+          </button>
+        </div>
+      </div>
+    );
+  }
   return (
     <div className="min-h-screen w-full dark:bg-gray-900 p-0">
-      <div className="max-w-full mx-auto dark:bg-gray-800 rounded-2xl p-6 md:p-6">
+      <div className="max-w-full mx-auto dark:bg-gray-800 rounded-2xl p-6 pt-0 md:p-6 md:pt-0">
         {error && (
           <div className="flex items-center gap-2 mb-4 text-sm text-red-600 bg-red-50 p-3 rounded-xl border border-red-200">
             <AlertCircle className="w-4 h-4 flex-shrink-0" /> {error}
@@ -563,9 +603,9 @@ export default function NewConsultationPage({
         {/* ======================================================== */}
         {/* 🌟 SECTION DU HAUT : ÉLÉMENTS ATTACHÉS À LA CONSULTATION */}
         {/* ======================================================== */}
-        <div className="mb-6">
+        <div className="mb-4">
           {totalAttached === 0 ? (
-            <div className="p-4 bg-gradient-to-r from-[var(--color-50)]/60 to-slate-50 border border-dashed border-[var(--color-300)] rounded-2xl flex items-center justify-between">
+            <div className="flex items-center justify-between gap-4 rounded-xl border border-dashed border-[var(--color-300)] bg-[var(--color-50)]/50 p-4">
               <p className="text-sm text-slate-600">
                 Aucun élément attaché pour le moment. Cliquez sur « Ajouter »
                 pour joindre une ordonnance, un bilan, une radio ou un prochain
@@ -576,264 +616,119 @@ export default function NewConsultationPage({
                 variant="outline"
                 size="sm"
                 onClick={() => setSelectorModalOpen(true)}
-                className="border-[var(--color-300)] text-[var(--color-700)] hover:bg-[var(--color-100)] rounded-xl"
+                className="shrink-0 rounded-lg border-[var(--color-300)] text-[var(--color-700)] hover:bg-[var(--color-50)]"
               >
-                + Ajouter
+                <Plus size={14} className="mr-1" />
+                Ajouter
               </Button>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-              {/* 💊 Ordonnance Card */}
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
+              {/* Ordonnance */}
               {hasOrdonnance && (
-                <div className="bg-blue-50/80 border border-blue-200/90 rounded-2xl p-4 shadow-sm flex flex-col justify-between hover:shadow-md transition-shadow">
-                  <div>
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="flex items-center gap-2">
-                        <div className="flex flex-row align-middle  items-center">
-                          {" "}
-                          <div className="flex flex-row p-1.5 bg-blue-100 text-blue-700 rounded-lg">
-                            <Pill size={18} />
-                          </div>
-                          <span className="p-1 font-semibold text-sm text-blue-900">
-                            Ordonnance
-                          </span>
-                        </div>
-                        <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-200/80 text-blue-800">
-                          {form.ordonnance.items.length} médicament(s)
-                        </span>
-                      </div>
-
-                      <div className="flex items-center justify-end gap-1.5  pt-2">
-                        <button
-                          type="button"
-                          onClick={() => handleEdit("ordonnance")}
-                          className="p-1.5 text-blue-700 hover:bg-blue-100 rounded-lg transition"
-                          title="Modifier l'ordonnance"
-                        >
-                          <Edit3 size={15} />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() =>
-                            handlePromptDelete(
-                              "ordonnance",
-                              null,
-                              "Supprimer l'ordonnance",
-                              "Êtes-vous sûr de vouloir retirer cette ordonnance de la consultation ?",
-                            )
-                          }
-                          className="p-1.5 text-red-500 hover:bg-red-100 rounded-lg transition"
-                          title="Supprimer l'ordonnance"
-                        >
-                          <Trash2 size={15} />
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
+                <AttachedCard
+                  icon={Pill}
+                  label="Ordonnance"
+                  badge={`${form.ordonnance.items.length} médicament(s)`}
+                  onEdit={() => handleEdit("ordonnance")}
+                  onDelete={() =>
+                    handlePromptDelete(
+                      "ordonnance",
+                      null,
+                      "Supprimer l'ordonnance",
+                      "Êtes-vous sûr de vouloir retirer cette ordonnance de la consultation ?",
+                    )
+                  }
+                  editTitle="Modifier l'ordonnance"
+                  deleteTitle="Supprimer l'ordonnance"
+                />
               )}
 
-              {/* 🔬 Bilan / Analyses Card */}
+              {/* Bilan */}
               {hasBilan && (
-                <div className="bg-emerald-50/80 border border-emerald-200/90 rounded-2xl p-4 shadow-sm flex flex-col justify-between hover:shadow-md transition-shadow">
-                  <div>
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="flex items-center gap-2">
-                        <div className="flex flex-row align-middle items-center">
-                          <div className="flex flex-row p-1.5 bg-emerald-100 text-emerald-700 rounded-lg">
-                            <FlaskConical size={18} />
-                          </div>
-                          <span className="p-1 font-semibold text-sm text-emerald-900">
-                            Bilan
-                          </span>
-                        </div>
-                        <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-200/80 text-emerald-800">
-                          {form.bilanRecip.items.length} analyse(s)
-                        </span>
-                      </div>
-
-                      <div className="flex items-center justify-end gap-1.5 pt-2">
-                        <button
-                          type="button"
-                          onClick={() => handleEdit("bilan")}
-                          className="p-1.5 text-emerald-700 hover:bg-emerald-100 rounded-lg transition"
-                          title="Modifier le bilan"
-                        >
-                          <Edit3 size={15} />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() =>
-                            handlePromptDelete(
-                              "bilan",
-                              null,
-                              "Supprimer le bilan",
-                              "Êtes-vous sûr de vouloir retirer ce bilan de la consultation ?",
-                            )
-                          }
-                          className="p-1.5 text-red-500 hover:bg-red-100 rounded-lg transition"
-                          title="Supprimer le bilan"
-                        >
-                          <Trash2 size={15} />
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
+                <AttachedCard
+                  icon={FlaskConical}
+                  label="Bilan"
+                  badge={`${form.bilanRecip.items.length} analyse(s)`}
+                  onEdit={() => handleEdit("bilan")}
+                  onDelete={() =>
+                    handlePromptDelete(
+                      "bilan",
+                      null,
+                      "Supprimer le bilan",
+                      "Êtes-vous sûr de vouloir retirer ce bilan de la consultation ?",
+                    )
+                  }
+                  editTitle="Modifier le bilan"
+                  deleteTitle="Supprimer le bilan"
+                />
               )}
 
-              {/* 📄 Justification Card */}
+              {/* Justification */}
               {hasJustification && (
-                <div className="bg-purple-50/80 border border-purple-200/90 rounded-2xl p-4 shadow-sm flex flex-col justify-between hover:shadow-md transition-shadow">
-                  <div>
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="flex items-center gap-2">
-                        <div className="flex flex-row align-middle items-center">
-                          <div className="flex flex-row p-1.5 bg-purple-100 text-purple-700 rounded-lg">
-                            <FileText size={18} />
-                          </div>
-                          <span className="p-1 font-semibold text-sm text-purple-900">
-                            Justification
-                          </span>
-                        </div>
-                        <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-purple-200/80 text-purple-800">
-                          {form.justification?.titre || "Certificat"}
-                        </span>
-                      </div>
-
-                      <div className="flex items-center justify-end gap-1.5 pt-2">
-                        <button
-                          type="button"
-                          onClick={() => handleEdit("justification")}
-                          className="p-1.5 text-purple-700 hover:bg-purple-100 rounded-lg transition"
-                          title="Modifier la justification"
-                        >
-                          <Edit3 size={15} />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() =>
-                            handlePromptDelete(
-                              "justification",
-                              null,
-                              "Supprimer la justification",
-                              "Êtes-vous sûr de vouloir retirer cette justification de la consultation ?",
-                            )
-                          }
-                          className="p-1.5 text-red-500 hover:bg-red-100 rounded-lg transition"
-                          title="Supprimer la justification"
-                        >
-                          <Trash2 size={15} />
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
+                <AttachedCard
+                  icon={FileText}
+                  label="Justification"
+                  badge="Certificat"
+                  onEdit={() => handleEdit("justification")}
+                  onDelete={() =>
+                    handlePromptDelete(
+                      "justification",
+                      null,
+                      "Supprimer la justification",
+                      "Êtes-vous sûr de vouloir retirer cette justification de la consultation ?",
+                    )
+                  }
+                  editTitle="Modifier la justification"
+                  deleteTitle="Supprimer la justification"
+                />
               )}
 
-              {/* 🩻 Radio Cards */}
+              {/* Radios */}
               {hasRadios &&
                 form.radios.map((radio, idx) => (
-                  <div
+                  <AttachedCard
                     key={`radio-${idx}`}
-                    className="bg-indigo-50/80 border border-indigo-200/90 rounded-2xl p-4 shadow-sm flex flex-col justify-between hover:shadow-md transition-shadow"
-                  >
-                    <div>
-                      <div className="flex items-center justify-between mb-2">
-                        <div className="flex items-center gap-2">
-                          <div className="flex flex-row align-middle items-center">
-                            <div className="flex flex-row p-1.5 bg-indigo-100 text-indigo-700 rounded-lg">
-                              <ImageIcon size={18} />
-                            </div>
-                            <span className="p-1 font-semibold text-sm text-indigo-900">
-                              Radio
-                            </span>
-                          </div>
-                          <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-indigo-200/80 text-indigo-800">
-                            {radio.description || radio.fichier || `Radio #${idx + 1}`}
-                          </span>
-                        </div>
-
-                        <div className="flex items-center justify-end gap-1.5 pt-2">
-                          <button
-                            type="button"
-                            onClick={() => handleEdit("radio", idx)}
-                            className="p-1.5 text-indigo-700 hover:bg-indigo-100 rounded-lg transition"
-                            title="Modifier la radio"
-                          >
-                            <Edit3 size={15} />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() =>
-                              handlePromptDelete(
-                                "radio",
-                                idx,
-                                "Supprimer la radio",
-                                "Êtes-vous sûr de vouloir supprimer cette radiographie de la consultation ?",
-                              )
-                            }
-                            className="p-1.5 text-red-500 hover:bg-red-100 rounded-lg transition"
-                            title="Supprimer la radio"
-                          >
-                            <Trash2 size={15} />
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
+                    icon={ImageIcon}
+                    label="Radio"
+                    badge={
+                      radio.description || radio.fichier || `Radio #${idx + 1}`
+                    }
+                    onEdit={() => handleEdit("radio", idx)}
+                    onDelete={() =>
+                      handlePromptDelete(
+                        "radio",
+                        idx,
+                        "Supprimer la radio",
+                        "Êtes-vous sûr de vouloir supprimer cette radiographie de la consultation ?",
+                      )
+                    }
+                    editTitle="Modifier la radio"
+                    deleteTitle="Supprimer la radio"
+                  />
                 ))}
 
-              {/* 📅 Prochain Rendez-vous Card */}
+              {/* Prochain rendez-vous */}
               {hasRendezVous && (
-                <div className="bg-amber-50/80 border border-amber-200/90 rounded-2xl p-4 shadow-sm flex flex-col justify-between hover:shadow-md transition-shadow">
-                  <div>
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="flex items-center gap-2">
-                        <div className="flex flex-row align-middle items-center">
-                          <div className="flex flex-row p-1.5 bg-amber-100 text-amber-700 rounded-lg">
-                            <Calendar size={18} />
-                          </div>
-                          <span className="p-1 font-semibold text-sm text-amber-900">
-                            Rendez-vous
-                          </span>
-                        </div>
-                        <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-200/80 text-amber-800">
-                          {new Date(form.rendezVousDate).toLocaleString("fr-FR", {
-                            dateStyle: "short",
-                            timeStyle: "short",
-                          })}
-                        </span>
-                      </div>
-
-                      <div className="flex items-center justify-end gap-1.5 pt-2">
-                        <button
-                          type="button"
-                          onClick={() => handleEdit("rendezVous")}
-                          className="p-1.5 text-amber-700 hover:bg-amber-100 rounded-lg transition"
-                          title="Modifier le rendez-vous"
-                        >
-                          <Edit3 size={15} />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() =>
-                            handlePromptDelete(
-                              "rendezVous",
-                              null,
-                              "Supprimer le rendez-vous",
-                              "Êtes-vous sûr de vouloir retirer ce rendez-vous de la consultation ?",
-                            )
-                          }
-                          className="p-1.5 text-red-500 hover:bg-red-100 rounded-lg transition"
-                          title="Supprimer le rendez-vous"
-                        >
-                          <Trash2 size={15} />
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
+                <AttachedCard
+                  icon={Calendar}
+                  label="Rendez-vous"
+                  badge={new Date(form.rendezVousDate).toLocaleString("fr-FR", {
+                    dateStyle: "short",
+                    timeStyle: "short",
+                  })}
+                  onEdit={() => handleEdit("rendezVous")}
+                  onDelete={() =>
+                    handlePromptDelete(
+                      "rendezVous",
+                      null,
+                      "Supprimer le rendez-vous",
+                      "Êtes-vous sûr de vouloir retirer ce rendez-vous de la consultation ?",
+                    )
+                  }
+                  editTitle="Modifier le rendez-vous"
+                  deleteTitle="Supprimer le rendez-vous"
+                />
               )}
             </div>
           )}
@@ -856,6 +751,342 @@ export default function NewConsultationPage({
           />
         </div>
 
+        {/* ======================================================== */}
+        {/* 🦷 SECTION SOINS & TRAITEMENTS DENTAIRES (PAR ONGLETS) */}
+        {/* ======================================================== */}
+        <div className="mb-6 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+          {/* Header */}
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-5 py-3.5">
+            <div className="flex items-center gap-3">
+              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
+                <Activity className="h-[18px] w-[18px]" />
+              </div>
+              <div>
+                <h3 className="flex items-center gap-2 text-sm font-semibold text-slate-900">
+                  Soins & Traitements dentaires
+                  <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600">
+                    {form.traitements.length}
+                  </span>
+                </h3>
+                <p className="text-xs text-slate-500">
+                  Associez un ou plusieurs soins réalisés lors de cette
+                  consultation
+                </p>
+              </div>
+            </div>
+
+            <Button
+              type="button"
+              size="sm"
+              onClick={() => {
+                fetchPatientTraitements();
+                setShowAddTreatmentDialog(true);
+              }}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--color-600)] text-xs font-medium text-white hover:bg-[var(--color-700)]"
+            >
+              <Plus size={14} />
+              Ajouter un soin
+            </Button>
+          </div>
+
+          {/* Empty state OR tabs */}
+          {form.traitements.length === 0 ? (
+            <div className="bg-slate-50/50 p-8 text-center">
+              <div className="mx-auto max-w-md">
+                <div className="mx-auto mb-3 flex h-11 w-11 items-center justify-center rounded-xl bg-slate-100 text-slate-500">
+                  <Activity className="h-5 w-5" />
+                </div>
+                <h4 className="mb-1 text-sm font-semibold text-slate-900">
+                  Aucun soin dentaire associé à cette consultation
+                </h4>
+                <p className="mb-4 text-xs text-slate-500">
+                  Sélectionnez un traitement en cours du patient ou créez un
+                  nouveau soin pour renseigner l'acte réalisé, le versement
+                  éventuel et le prochain rendez-vous.
+                </p>
+                <div className="flex items-center justify-center gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      fetchPatientTraitements();
+                      setAddTreatmentMode("existing");
+                      setShowAddTreatmentDialog(true);
+                    }}
+                    className="rounded-lg border-slate-300 text-xs text-slate-700 hover:bg-slate-100"
+                  >
+                    Sélectionner un soin en cours
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={() => {
+                      fetchPatientTraitements();
+                      setAddTreatmentMode("new");
+                      setShowAddTreatmentDialog(true);
+                    }}
+                    className="rounded-lg bg-[var(--color-600)] text-xs text-white hover:bg-[var(--color-700)]"
+                  >
+                    <Plus size={14} className="mr-1" />
+                    Nouveau traitement
+                  </Button>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div>
+              {/* TAB BAR */}
+              <div className="flex items-end gap-1 overflow-x-auto border-b border-slate-200 bg-slate-50/70 px-4 pt-3">
+                {form.traitements.map((tr, idx) => {
+                  const isActive = idx === activeTreatmentIndex;
+                  return (
+                    <div
+                      key={`tab-tr-${idx}`}
+                      onClick={() => setActiveTreatmentIndex(idx)}
+                      className={`group -mb-px flex cursor-pointer select-none items-center gap-2 rounded-t-lg border-x border-t px-3.5 py-2.5 text-xs transition-colors ${
+                        isActive
+                          ? "border-slate-200 border-b-white bg-white font-semibold text-slate-900"
+                          : "border-transparent text-slate-500 hover:bg-slate-100 hover:text-slate-900"
+                      }`}
+                    >
+                      <Activity
+                        size={14}
+                        className={
+                          isActive
+                            ? "text-[var(--color-600)]"
+                            : "text-slate-400"
+                        }
+                      />
+                      <span className="max-w-[130px] truncate">
+                        {tr.description || `Soin #${idx + 1}`}
+                      </span>
+                      {tr.dent && (
+                        <span className="rounded border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-semibold text-slate-600">
+                          D{tr.dent}
+                        </span>
+                      )}
+                      <span className="text-[10px] font-normal text-slate-400">
+                        {tr.traitementId ? "En cours" : "Nouveau"}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handlePromptDelete(
+                            "traitementTab",
+                            idx,
+                            "Retirer ce soin",
+                            `Êtes-vous sûr de vouloir retirer le soin "${tr.description}" de cette consultation ?`,
+                          );
+                        }}
+                        className="rounded p-0.5 text-slate-400 transition hover:bg-red-50 hover:text-red-600"
+                        title="Retirer ce soin"
+                      >
+                        <X size={13} />
+                      </button>
+                    </div>
+                  );
+                })}
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    fetchPatientTraitements();
+                    setShowAddTreatmentDialog(true);
+                  }}
+                  className="mb-1 ml-2 flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-medium text-slate-600 transition hover:bg-slate-200/60 hover:text-slate-900"
+                  title="Ajouter un autre soin à cette consultation"
+                >
+                  <Plus size={14} />
+                  Ajouter un soin
+                </button>
+              </div>
+
+              {/* ACTIVE TAB CONTENT */}
+              {form.traitements[activeTreatmentIndex] &&
+                (() => {
+                  const tr = form.traitements[activeTreatmentIndex];
+
+                  // A block is "active" as soon as one of its fields has a value
+                  const versementOn = Boolean(
+                    tr.versementMontant || tr.versementNote,
+                  );
+                  const rdvOn = Boolean(
+                    tr.rendezVousDate || tr.rendezVousDescription,
+                  );
+
+                  const fieldClass = (on) =>
+                    `h-9 rounded-lg bg-white text-xs transition focus:ring-2 focus:ring-[var(--color-400)] ${
+                      on ? "border-[var(--color-300)]" : "border-slate-300"
+                    }`;
+
+                  const blockClass = (on) =>
+                    `rounded-lg border p-3.5 transition-colors ${
+                      on
+                        ? "border-[var(--color-300)] bg-white shadow-sm"
+                        : "border-slate-200 bg-slate-50/60"
+                    }`;
+
+                  return (
+                    <div className="space-y-4 p-5">
+                      {/* Acte réalisé */}
+                      <div>
+                        <label className="mb-1.5 block text-[11px] font-medium uppercase tracking-wider text-slate-600">
+                          Acte réalisé lors de cette séance{" "}
+                          <span className="text-red-500">*</span>
+                        </label>
+                        <textarea
+                          rows={3}
+                          required
+                          value={tr.acteRealise || ""}
+                          onChange={(e) =>
+                            updateActiveTreatment({
+                              acteRealise: e.target.value,
+                            })
+                          }
+                          placeholder="Ex: Alésage canalaire et irrigation, mise en place d'un pansement provisoire..."
+                          className="w-full rounded-lg border border-slate-300 bg-white px-3.5 py-2.5 text-xs text-slate-800 shadow-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-400)]"
+                        />
+                      </div>
+
+                      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                        {/* VERSEMENT */}
+                        <div className={blockClass(versementOn)}>
+                          <div className="mb-3 flex items-center gap-1.5 text-xs font-medium text-slate-900">
+                            <DollarSign
+                              size={14}
+                              className={
+                                versementOn
+                                  ? "text-[var(--color-600)]"
+                                  : "text-slate-400"
+                              }
+                            />
+                            Versement de séance
+                            <span className="font-normal text-slate-400">
+                              (optionnel)
+                            </span>
+                          </div>
+
+                          <div className="space-y-2.5">
+                            <div>
+                              <label className="mb-1 block text-[11px] font-medium text-slate-500">
+                                Montant versé (DZD)
+                              </label>
+                              <Input
+                                type="number"
+                                min="0"
+                                step="100"
+                                value={tr.versementMontant || ""}
+                                onChange={(e) =>
+                                  updateActiveTreatment({
+                                    versementMontant: e.target.value,
+                                    hasVersement: Boolean(
+                                      e.target.value || tr.versementNote,
+                                    ),
+                                  })
+                                }
+                                placeholder="0"
+                                className={fieldClass(
+                                  Boolean(tr.versementMontant),
+                                )}
+                              />
+                            </div>
+                            <div>
+                              <label className="mb-1 block text-[11px] font-medium text-slate-500">
+                                Note / Mode de règlement
+                              </label>
+                              <Input
+                                type="text"
+                                value={tr.versementNote || ""}
+                                onChange={(e) =>
+                                  updateActiveTreatment({
+                                    versementNote: e.target.value,
+                                    hasVersement: Boolean(
+                                      e.target.value || tr.versementMontant,
+                                    ),
+                                  })
+                                }
+                                placeholder="Ex: Espèces, Acompte séance..."
+                                className={fieldClass(
+                                  Boolean(tr.versementNote),
+                                )}
+                              />
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* PROCHAIN RDV */}
+                        <div className={blockClass(rdvOn)}>
+                          <div className="mb-3 flex items-center gap-1.5 text-xs font-medium text-slate-900">
+                            <Calendar
+                              size={14}
+                              className={
+                                rdvOn
+                                  ? "text-[var(--color-600)]"
+                                  : "text-slate-400"
+                              }
+                            />
+                            Prochain rendez-vous
+                            <span className="font-normal text-slate-400">
+                              (optionnel)
+                            </span>
+                          </div>
+
+                          <div className="space-y-2.5">
+                            <div>
+                              <label className="mb-1 block text-[11px] font-medium text-slate-500">
+                                Date et heure
+                              </label>
+                              <Input
+                                type="datetime-local"
+                                value={tr.rendezVousDate || ""}
+                                onChange={(e) =>
+                                  updateActiveTreatment({
+                                    rendezVousDate: e.target.value,
+                                    hasRendezVous: Boolean(
+                                      e.target.value ||
+                                      tr.rendezVousDescription,
+                                    ),
+                                  })
+                                }
+                                className={fieldClass(
+                                  Boolean(tr.rendezVousDate),
+                                )}
+                              />
+                            </div>
+                            <div>
+                              <label className="mb-1 block text-[11px] font-medium text-slate-500">
+                                Objet de la prochaine séance
+                              </label>
+                              <Input
+                                type="text"
+                                value={tr.rendezVousDescription || ""}
+                                onChange={(e) =>
+                                  updateActiveTreatment({
+                                    rendezVousDescription: e.target.value,
+                                    hasRendezVous: Boolean(
+                                      e.target.value || tr.rendezVousDate,
+                                    ),
+                                  })
+                                }
+                                placeholder="Ex: Obturation définitive composite..."
+                                className={fieldClass(
+                                  Boolean(tr.rendezVousDescription),
+                                )}
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Treatment summary: keep your existing block here, unchanged */}
+                    </div>
+                  );
+                })()}
+            </div>
+          )}
+        </div>
         {/* ====================== */}
         {/* 📝 NOTES CLINIQUES */}
         {/* ====================== */}
@@ -872,437 +1103,6 @@ export default function NewConsultationPage({
             className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-300)]"
           />
         </div>
-
-        {/* ======================================================== */}
-        {/* 🦷 SECTION SOINS & TRAITEMENTS DENTAIRES (PAR ONGLETS) */}
-        {/* ======================================================== */}
-        <div className="mb-6 rounded-2xl border border-teal-200/90 bg-white shadow-sm overflow-hidden">
-          {/* Header de la section soins */}
-          <div className="bg-gradient-to-r from-teal-50 via-teal-50/40 to-white px-5 py-3.5 border-b border-teal-100 flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-2.5">
-              <div className="p-2 bg-teal-600 text-white rounded-xl shadow-sm">
-                <Activity className="w-5 h-5" />
-              </div>
-              <div>
-                <h3 className="font-bold text-slate-900 text-base flex items-center gap-2">
-                  Soins & Traitements dentaires
-                  <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-teal-100 text-teal-800 border border-teal-200">
-                    {form.traitements.length}
-                  </span>
-                </h3>
-                <p className="text-xs text-slate-500">
-                  Associez un ou plusieurs soins réalisés lors de cette consultation
-                </p>
-              </div>
-            </div>
-
-            <Button
-              type="button"
-              onClick={() => {
-                fetchPatientTraitements();
-                setShowAddTreatmentDialog(true);
-              }}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold bg-teal-600 hover:bg-teal-700 text-white shadow-sm transition"
-            >
-              <Plus size={15} />
-              <span>Ajouter un soin</span>
-            </Button>
-          </div>
-
-          {/* Corps de la section : Vide OU Onglets */}
-          {form.traitements.length === 0 ? (
-            <div className="p-8 text-center bg-slate-50/50">
-              <div className="max-w-md mx-auto">
-                <div className="w-12 h-12 mx-auto mb-3 rounded-2xl bg-teal-100/70 text-teal-700 flex items-center justify-center">
-                  <Activity className="w-6 h-6" />
-                </div>
-                <h4 className="text-sm font-semibold text-slate-800 mb-1">
-                  Aucun soin dentaire associé à cette consultation
-                </h4>
-                <p className="text-xs text-slate-500 mb-4">
-                  Sélectionnez un traitement en cours du patient ou créez un nouveau soin pour renseigner l'acte réalisé, le versement éventuel et le prochain rendez-vous.
-                </p>
-                <div className="flex items-center justify-center gap-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      fetchPatientTraitements();
-                      setAddTreatmentMode("existing");
-                      setShowAddTreatmentDialog(true);
-                    }}
-                    className="rounded-xl text-xs border-teal-300 text-teal-800 hover:bg-teal-50"
-                  >
-                    Sélectionner un soin en cours
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    onClick={() => {
-                      fetchPatientTraitements();
-                      setAddTreatmentMode("new");
-                      setShowAddTreatmentDialog(true);
-                    }}
-                    className="rounded-xl text-xs bg-teal-600 hover:bg-teal-700 text-white"
-                  >
-                    <Plus size={14} className="mr-1" />
-                    Nouveau traitement
-                  </Button>
-                </div>
-              </div>
-            </div>
-          ) : (
-            <div>
-              {/* BARRE D'ONGLETS */}
-              <div className="flex items-center gap-1.5 px-4 pt-3 border-b border-slate-200 bg-slate-50/70 overflow-x-auto">
-                {form.traitements.map((tr, idx) => {
-                  const isActive = idx === activeTreatmentIndex;
-                  return (
-                    <div
-                      key={`tab-tr-${idx}`}
-                      className={`group flex items-center gap-2 px-3.5 py-2.5 rounded-t-xl text-xs font-medium cursor-pointer transition-all border-t border-x -mb-[1px] select-none ${
-                        isActive
-                          ? "bg-white border-slate-200 border-b-white text-teal-800 font-semibold shadow-sm"
-                          : "bg-slate-100/80 border-transparent text-slate-600 hover:bg-slate-200/60 hover:text-slate-900"
-                      }`}
-                      onClick={() => setActiveTreatmentIndex(idx)}
-                    >
-                      <Activity
-                        size={14}
-                        className={isActive ? "text-teal-600" : "text-slate-400"}
-                      />
-                      <span className="truncate max-w-[130px]">
-                        {tr.description || `Soin #${idx + 1}`}
-                      </span>
-                      {tr.dent && (
-                        <span className="px-1.5 py-0.2 rounded text-[10px] bg-teal-100 text-teal-800 font-semibold">
-                          D{tr.dent}
-                        </span>
-                      )}
-                      {tr.traitementId ? (
-                        <span className="text-[10px] text-slate-400 group-hover:text-slate-600">
-                          (En cours)
-                        </span>
-                      ) : (
-                        <span className="text-[10px] text-emerald-600 font-medium">
-                          (Nouveau)
-                        </span>
-                      )}
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handlePromptDelete(
-                            "traitementTab",
-                            idx,
-                            "Retirer ce soin",
-                            `Êtes-vous sûr de vouloir retirer le soin "${tr.description}" de cette consultation ?`,
-                          );
-                        }}
-                        className="ml-1 p-0.5 rounded text-slate-400 hover:text-red-600 hover:bg-red-50 transition"
-                        title="Retirer ce soin"
-                      >
-                        <X size={13} />
-                      </button>
-                    </div>
-                  );
-                })}
-
-                {/* Bouton '+' pour ajouter un autre soin */}
-                <button
-                  type="button"
-                  onClick={() => {
-                    fetchPatientTraitements();
-                    setShowAddTreatmentDialog(true);
-                  }}
-                  className="flex items-center gap-1 px-3 py-2 text-xs font-semibold text-teal-700 hover:bg-teal-100/80 rounded-lg transition ml-2 mb-1"
-                  title="Ajouter un autre soin à cette consultation"
-                >
-                  <Plus size={14} />
-                  <span>Ajouter un soin</span>
-                </button>
-              </div>
-
-              {/* CONTENU DE L'ONGLET ACTIF */}
-              {form.traitements[activeTreatmentIndex] && (() => {
-                const tr = form.traitements[activeTreatmentIndex];
-                return (
-                  <div className="p-5 space-y-4">
-                    {/* Bannière d'info du soin */}
-                    <div className="flex flex-wrap items-center justify-between gap-3 p-3.5 bg-slate-50 border border-slate-200/80 rounded-xl text-xs">
-                      <div className="flex items-center gap-3">
-                        <span className="font-semibold text-slate-900 text-sm">
-                          {tr.description}
-                        </span>
-                        {tr.dent && (
-                          <span className="px-2 py-0.5 rounded-full bg-teal-100 text-teal-800 font-semibold">
-                            Dent {tr.dent}
-                          </span>
-                        )}
-                        <span
-                          className={`px-2 py-0.5 rounded-full font-medium ${
-                            tr.traitementId
-                              ? "bg-slate-200 text-slate-800"
-                              : "bg-emerald-100 text-emerald-800"
-                          }`}
-                        >
-                          {tr.traitementId ? "Traitement suivi" : "Nouveau plan de traitement"}
-                        </span>
-                      </div>
-
-                      {tr.traitementId ? (
-                        <div className="flex items-center gap-4 text-xs">
-                          <div>
-                            <span className="text-slate-500">Prix total : </span>
-                            <span className="font-semibold text-slate-800">
-                              {Number(tr.prixTotal).toLocaleString("fr-FR")} DZD
-                            </span>
-                          </div>
-                          <div>
-                            <span className="text-slate-500">Déjà réglé : </span>
-                            <span className="font-semibold text-emerald-700">
-                              {Number(tr.totalPaye).toLocaleString("fr-FR")} DZD
-                            </span>
-                          </div>
-                          <div>
-                            <span className="text-slate-500">Reste : </span>
-                            <span className="font-bold text-amber-700">
-                              {Number(tr.resteAPayer).toLocaleString("fr-FR")} DZD
-                            </span>
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="flex items-center gap-4 text-xs">
-                          <div>
-                            <span className="text-slate-500">Prix estimé : </span>
-                            <span className="font-bold text-slate-800">
-                              {Number(tr.prixTotal).toLocaleString("fr-FR")} DZD
-                            </span>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Champ Requis : Acte réalisé lors de la séance */}
-                    <div>
-                      <label className="block text-xs font-bold text-slate-800 mb-1.5 uppercase tracking-wider">
-                        Acte réalisé lors de cette séance <span className="text-red-500">*</span>
-                      </label>
-                      <textarea
-                        rows={3}
-                        required
-                        value={tr.acteRealise || ""}
-                        onChange={(e) =>
-                          updateActiveTreatment({ acteRealise: e.target.value })
-                        }
-                        placeholder="Ex: Alésage canalaire et irrigation, mise en place d'un pansement provisoire..."
-                        className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-teal-400 bg-white shadow-sm"
-                      />
-                    </div>
-
-                    {/* Champs Optionnels : Versement & Prochain rendez-vous */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
-                      {/* --- OPTIONNEL 1: VERSEMENT / PAIEMENT DE SÉANCE --- */}
-                      <div
-                        className={`rounded-xl border transition-all p-3.5 ${
-                          tr.hasVersement || tr.versementMontant
-                            ? "bg-emerald-50/60 border-emerald-300 shadow-sm"
-                            : "bg-slate-50/60 border-slate-200 opacity-70"
-                        }`}
-                      >
-                        <div className="flex items-center justify-between mb-2.5">
-                          <label className="flex items-center gap-2 cursor-pointer select-none">
-                            <input
-                              type="checkbox"
-                              checked={Boolean(tr.hasVersement || tr.versementMontant)}
-                              onChange={(e) => {
-                                const checked = e.target.checked;
-                                updateActiveTreatment({
-                                  hasVersement: checked,
-                                  versementMontant: checked ? tr.versementMontant || "" : "",
-                                  versementNote: checked ? tr.versementNote || "" : "",
-                                });
-                              }}
-                              className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 w-4 h-4"
-                            />
-                            <span
-                              className={`text-xs font-semibold flex items-center gap-1.5 ${
-                                tr.hasVersement || tr.versementMontant ? "text-emerald-900" : "text-slate-600"
-                              }`}
-                            >
-                              <DollarSign size={14} className={tr.hasVersement || tr.versementMontant ? "text-emerald-700" : "text-slate-400"} />
-                              Versement de séance (Optionnel)
-                            </span>
-                          </label>
-                          {!(tr.hasVersement || tr.versementMontant) ? (
-                            <button
-                              type="button"
-                              onClick={() => updateActiveTreatment({ hasVersement: true })}
-                              className="text-[10px] font-medium text-slate-500 hover:text-emerald-700 bg-slate-200/70 hover:bg-emerald-100 px-2 py-0.5 rounded-full transition"
-                            >
-                              + Activer
-                            </button>
-                          ) : (
-                            <span className="text-[10px] font-medium text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full">
-                              Activé
-                            </span>
-                          )}
-                        </div>
-
-                        <div className="space-y-2">
-                          <div>
-                            <label className="block text-[11px] font-medium text-slate-600 mb-1">
-                              Montant versé (DZD)
-                            </label>
-                            <Input
-                              type="number"
-                              min="0"
-                              step="100"
-                              disabled={!(tr.hasVersement || tr.versementMontant)}
-                              value={tr.versementMontant || ""}
-                              onChange={(e) => {
-                                updateActiveTreatment({
-                                  hasVersement: true,
-                                  versementMontant: e.target.value,
-                                });
-                              }}
-                              placeholder="0"
-                              className={`h-9 text-xs rounded-lg transition ${
-                                tr.hasVersement || tr.versementMontant
-                                  ? "bg-white border-emerald-300 focus:ring-emerald-400"
-                                  : "bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed"
-                              }`}
-                            />
-                          </div>
-
-                          <div>
-                            <label className="block text-[11px] font-medium text-slate-600 mb-1">
-                              Note / Mode de règlement
-                            </label>
-                            <Input
-                              type="text"
-                              disabled={!(tr.hasVersement || tr.versementMontant)}
-                              value={tr.versementNote || ""}
-                              onChange={(e) => {
-                                updateActiveTreatment({
-                                  hasVersement: true,
-                                  versementNote: e.target.value,
-                                });
-                              }}
-                              placeholder="Ex: Espèces, Acompte séance..."
-                              className={`h-9 text-xs rounded-lg transition ${
-                                tr.hasVersement || tr.versementMontant
-                                  ? "bg-white border-emerald-300 focus:ring-emerald-400"
-                                  : "bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed"
-                              }`}
-                            />
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* --- OPTIONNEL 2: PROCHAIN RENDEZ-VOUS POUR CE SOIN --- */}
-                      <div
-                        className={`rounded-xl border transition-all p-3.5 ${
-                          tr.hasRendezVous || tr.rendezVousDate
-                            ? "bg-amber-50/60 border-amber-300 shadow-sm"
-                            : "bg-slate-50/60 border-slate-200 opacity-70"
-                        }`}
-                      >
-                        <div className="flex items-center justify-between mb-2.5">
-                          <label className="flex items-center gap-2 cursor-pointer select-none">
-                            <input
-                              type="checkbox"
-                              checked={Boolean(tr.hasRendezVous || tr.rendezVousDate)}
-                              onChange={(e) => {
-                                const checked = e.target.checked;
-                                updateActiveTreatment({
-                                  hasRendezVous: checked,
-                                  rendezVousDate: checked ? tr.rendezVousDate || "" : "",
-                                  rendezVousDescription: checked ? tr.rendezVousDescription || "" : "",
-                                });
-                              }}
-                              className="rounded border-slate-300 text-amber-600 focus:ring-amber-500 w-4 h-4"
-                            />
-                            <span
-                              className={`text-xs font-semibold flex items-center gap-1.5 ${
-                                tr.hasRendezVous || tr.rendezVousDate ? "text-amber-900" : "text-slate-600"
-                              }`}
-                            >
-                              <Calendar size={14} className={tr.hasRendezVous || tr.rendezVousDate ? "text-amber-700" : "text-slate-400"} />
-                              Prochain rendez-vous pour ce soin (Optionnel)
-                            </span>
-                          </label>
-                          {!(tr.hasRendezVous || tr.rendezVousDate) ? (
-                            <button
-                              type="button"
-                              onClick={() => updateActiveTreatment({ hasRendezVous: true })}
-                              className="text-[10px] font-medium text-slate-500 hover:text-amber-700 bg-slate-200/70 hover:bg-amber-100 px-2 py-0.5 rounded-full transition"
-                            >
-                              + Activer
-                            </button>
-                          ) : (
-                            <span className="text-[10px] font-medium text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full">
-                              Activé
-                            </span>
-                          )}
-                        </div>
-
-                        <div className="space-y-2">
-                          <div>
-                            <label className="block text-[11px] font-medium text-slate-600 mb-1">
-                              Date et heure
-                            </label>
-                            <Input
-                              type="datetime-local"
-                              disabled={!(tr.hasRendezVous || tr.rendezVousDate)}
-                              value={tr.rendezVousDate || ""}
-                              onChange={(e) => {
-                                updateActiveTreatment({
-                                  hasRendezVous: true,
-                                  rendezVousDate: e.target.value,
-                                });
-                              }}
-                              className={`h-9 text-xs rounded-lg transition ${
-                                tr.hasRendezVous || tr.rendezVousDate
-                                  ? "bg-white border-amber-300 focus:ring-amber-400"
-                                  : "bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed"
-                              }`}
-                            />
-                          </div>
-
-                          <div>
-                            <label className="block text-[11px] font-medium text-slate-600 mb-1">
-                              Description / Objet de la prochaine séance
-                            </label>
-                            <Input
-                              type="text"
-                              disabled={!(tr.hasRendezVous || tr.rendezVousDate)}
-                              value={tr.rendezVousDescription || ""}
-                              onChange={(e) => {
-                                updateActiveTreatment({
-                                  hasRendezVous: true,
-                                  rendezVousDescription: e.target.value,
-                                });
-                              }}
-                              placeholder="Ex: Obturation définitive composite..."
-                              className={`h-9 text-xs rounded-lg transition ${
-                                tr.hasRendezVous || tr.rendezVousDate
-                                  ? "bg-white border-amber-300 focus:ring-amber-400"
-                                  : "bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed"
-                              }`}
-                            />
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })()}
-            </div>
-          )}
-        </div>
-
         {/* ====================== */}
         {/* 💾 BOUTON ENREGISTRER */}
         {/* ====================== */}
@@ -1610,7 +1410,8 @@ export default function NewConsultationPage({
               Ajouter un soin dentaire
             </DialogTitle>
             <DialogDescription className="text-xs text-slate-500">
-              Choisissez un soin en cours de ce patient ou initialisez un nouveau traitement dentaire.
+              Choisissez un soin en cours de ce patient ou initialisez un
+              nouveau traitement dentaire.
             </DialogDescription>
           </DialogHeader>
 
@@ -1653,9 +1454,7 @@ export default function NewConsultationPage({
                   </div>
                 ) : patientTraitements.length === 0 ? (
                   <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800 flex items-center justify-between">
-                    <span>
-                      Aucun traitement en cours pour ce patient.
-                    </span>
+                    <span>Aucun traitement en cours pour ce patient.</span>
                     <Button
                       type="button"
                       size="sm"
@@ -1673,12 +1472,14 @@ export default function NewConsultationPage({
                     className="w-full h-11 px-3 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400 bg-white"
                   >
                     <option value="">
-                      -- Choisissez un traitement ({patientTraitements.length}) --
+                      -- Choisissez un traitement ({patientTraitements.length})
+                      --
                     </option>
                     {patientTraitements.map((t) => (
                       <option key={t.id} value={t.id}>
-                        {t.description} {t.dent ? `(Dent ${t.dent})` : ""} - Reste:{" "}
-                        {Number(t.resteAPayer).toLocaleString("fr-FR")} DZD
+                        {t.description} {t.dent ? `(Dent ${t.dent})` : ""} -
+                        Reste: {Number(t.resteAPayer).toLocaleString("fr-FR")}{" "}
+                        DZD
                       </option>
                     ))}
                   </select>
@@ -1686,34 +1487,35 @@ export default function NewConsultationPage({
               </div>
 
               {/* Aperçu du traitement sélectionné */}
-              {selectedExistingId && (() => {
-                const sel = patientTraitements.find(
-                  (t) => t.id === Number(selectedExistingId),
-                );
-                if (!sel) return null;
-                return (
-                  <div className="p-3 bg-teal-50/70 border border-teal-200 rounded-xl text-xs text-teal-900 grid grid-cols-3 gap-2 text-center">
-                    <div>
-                      <span className="text-slate-500 block">Prix Total</span>
-                      <span className="font-bold text-slate-800">
-                        {Number(sel.prixTotal).toLocaleString("fr-FR")} DZD
-                      </span>
+              {selectedExistingId &&
+                (() => {
+                  const sel = patientTraitements.find(
+                    (t) => t.id === Number(selectedExistingId),
+                  );
+                  if (!sel) return null;
+                  return (
+                    <div className="p-3 bg-teal-50/70 border border-teal-200 rounded-xl text-xs text-teal-900 grid grid-cols-3 gap-2 text-center">
+                      <div>
+                        <span className="text-slate-500 block">Prix Total</span>
+                        <span className="font-bold text-slate-800">
+                          {Number(sel.prixTotal).toLocaleString("fr-FR")} DZD
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-slate-500 block">Déjà payé</span>
+                        <span className="font-bold text-emerald-600">
+                          {Number(sel.totalPaye).toLocaleString("fr-FR")} DZD
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-slate-500 block">Reste</span>
+                        <span className="font-bold text-amber-700">
+                          {Number(sel.resteAPayer).toLocaleString("fr-FR")} DZD
+                        </span>
+                      </div>
                     </div>
-                    <div>
-                      <span className="text-slate-500 block">Déjà payé</span>
-                      <span className="font-bold text-emerald-600">
-                        {Number(sel.totalPaye).toLocaleString("fr-FR")} DZD
-                      </span>
-                    </div>
-                    <div>
-                      <span className="text-slate-500 block">Reste</span>
-                      <span className="font-bold text-amber-700">
-                        {Number(sel.resteAPayer).toLocaleString("fr-FR")} DZD
-                      </span>
-                    </div>
-                  </div>
-                );
-              })()}
+                  );
+                })()}
 
               <DialogFooter className="mt-4 flex justify-end gap-2 pt-2 border-t border-slate-100">
                 <Button

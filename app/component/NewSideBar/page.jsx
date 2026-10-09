@@ -218,7 +218,6 @@ export default function App() {
     { title: "Predifined", url: "Predifined", icon: FileText },
     { title: "Médicaments", url: "Medicament", icon: Pill },
     { title: "Bilans", url: "Bilans", icon: TestTube },
-    { title: "Vaccine", url: "Vaccinations", icon: Syringe },
   ];
 
   const handleNavigate = (item) => {

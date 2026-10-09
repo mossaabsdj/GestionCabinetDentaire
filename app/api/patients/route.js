@@ -69,6 +69,23 @@ export async function GET(request) {
                       createdAt: true,
                       motifDeConsultation: true,
                       note: true,
+                      ordonnance: {
+                        include: {
+                          items: {
+                            include: { medicament: true },
+                          },
+                        },
+                      },
+                      bilanRecip: {
+                        include: {
+                          items: {
+                            include: { bilan: true },
+                          },
+                        },
+                      },
+                      rendezVous: {
+                        select: { id: true, date: true, description: true },
+                      },
                     },
                   },
                 },

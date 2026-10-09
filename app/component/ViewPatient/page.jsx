@@ -798,7 +798,6 @@ export default function PatientModal({ open, onClose, patient = {} }) {
                                     age: patientAge,
                                     consultationId: consult.id,
                                     texte: consult.justificationRecord.texte,
-                                    titre: consult.justificationRecord.titre,
                                   })
                                 }
                                 className="bg-gradient-to-r from-[var(--color-500)] to-[var(--color-600)] hover:from-[var(--color-600)] hover:to-[var(--color-700)] text-white shadow-md hover:shadow-lg transition-all duration-200 flex items-center gap-1.5"

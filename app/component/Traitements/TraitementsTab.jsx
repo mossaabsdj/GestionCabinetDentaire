@@ -18,6 +18,7 @@ import {
   FileText,
   Sparkles,
   ArrowRight,
+  Eye,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -31,6 +32,18 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import Swal from "sweetalert2";
+import TraitementDetailModal from "./TraitementDetailModal";
+
+function isSameDate(itemDate, targetDateStr) {
+  if (!targetDateStr) return true;
+  if (!itemDate) return false;
+  const d = new Date(itemDate);
+  if (isNaN(d.getTime())) return false;
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}` === targetDateStr;
+}
 
 export default function TraitementsTab({
   patient,
@@ -38,6 +51,10 @@ export default function TraitementsTab({
   patientId,
   onRefresh,
   onContinueTraitement,
+  query = "",
+  dateFilter = "",
+  showNewTraitementModal,
+  setShowNewTraitementModal,
 }) {
   const currentPatient = selectedPatient || patient;
   const currentPatientId = patientId || currentPatient?.id;
@@ -71,7 +88,15 @@ export default function TraitementsTab({
   }, [currentPatientId]);
 
   // Modal: Nouveau Traitement
-  const [showNewModal, setShowNewModal] = useState(false);
+  const [internalShowNewModal, setInternalShowNewModal] = useState(false);
+  const showNewModal =
+    showNewTraitementModal !== undefined
+      ? showNewTraitementModal
+      : internalShowNewModal;
+  const setShowNewModal = (val) => {
+    setInternalShowNewModal(val);
+    setShowNewTraitementModal?.(val);
+  };
   const [newForm, setNewForm] = useState({
     description: "",
     dent: "",
@@ -102,17 +127,24 @@ export default function TraitementsTab({
   });
   const [savingEdit, setSavingEdit] = useState(false);
 
+  // Modal: Détails du traitement
+  const [detailModalOpen, setDetailModalOpen] = useState(false);
+  const [selectedDetailTraitement, setSelectedDetailTraitement] = useState(null);
+
   // Compute enriched treatments
   const sourceTraitements =
     localTraitements !== null
       ? localTraitements
-      : (currentPatient?.traitements || []);
+      : currentPatient?.traitements || [];
 
   const traitements = sourceTraitements.map((t) => {
     const paid =
       t.totalPaye !== undefined
         ? Number(t.totalPaye)
-        : (t.versements || []).reduce((acc, v) => acc + (Number(v.montant) || 0), 0);
+        : (t.versements || []).reduce(
+            (acc, v) => acc + (Number(v.montant) || 0),
+            0,
+          );
     const reste =
       t.resteAPayer !== undefined
         ? Number(t.resteAPayer)
@@ -125,8 +157,38 @@ export default function TraitementsTab({
   });
 
   const filteredTraitements = traitements.filter((t) => {
-    if (filterStatut === "TOUS") return true;
-    return t.statut === filterStatut;
+    if (filterStatut !== "TOUS" && t.statut !== filterStatut) return false;
+
+    if (query && query.trim()) {
+      const q = query.trim().toLowerCase();
+      const matchesDesc = t.description?.toLowerCase().includes(q);
+      const matchesDent = t.dent?.toLowerCase().includes(q);
+      const matchesActe = t.consultationsTraitement?.some(
+        (ct) =>
+          ct.acteRealise?.toLowerCase().includes(q) ||
+          ct.consultation?.motifDeConsultation?.toLowerCase().includes(q) ||
+          ct.consultation?.note?.toLowerCase().includes(q),
+      );
+      const matchesPrice = String(t.prixTotal || "").includes(q);
+      if (!matchesDesc && !matchesDent && !matchesActe && !matchesPrice) {
+        return false;
+      }
+    }
+
+    if (dateFilter) {
+      const matchesCreatedAt = isSameDate(t.createdAt, dateFilter);
+      const matchesSessions = t.consultationsTraitement?.some((ct) =>
+        isSameDate(ct.createdAt || ct.consultation?.createdAt, dateFilter),
+      );
+      const matchesVersements = t.versements?.some((v) =>
+        isSameDate(v.date || v.createdAt, dateFilter),
+      );
+      if (!matchesCreatedAt && !matchesSessions && !matchesVersements) {
+        return false;
+      }
+    }
+
+    return true;
   });
 
   // Calculate totals
@@ -136,7 +198,7 @@ export default function TraitementsTab({
 
   const totalPaye = traitements.reduce(
     (sum, t) => sum + (Number(t.totalPaye) || 0),
-    0
+    0,
   );
 
   const resteTotal = Math.max(0, totalPrix - totalPaye);
@@ -246,7 +308,7 @@ export default function TraitementsTab({
         icon: "warning",
         title: "Montant excessif",
         text: `Le versement ne peut pas dépasser le reste à payer (${reste.toLocaleString(
-          "fr-FR"
+          "fr-FR",
         )} DZD).`,
       });
       return;
@@ -267,7 +329,8 @@ export default function TraitementsTab({
       });
 
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Erreur lors de l'enregistrement");
+      if (!res.ok)
+        throw new Error(data.error || "Erreur lors de l'enregistrement");
 
       setVersementModal({
         open: false,
@@ -328,6 +391,17 @@ export default function TraitementsTab({
         statut: "EN_COURS",
       });
 
+      if (selectedDetailTraitement?.id === editModal.id) {
+        setSelectedDetailTraitement((prev) => ({
+          ...prev,
+          ...data,
+          description: editModal.description.trim(),
+          dent: editModal.dent?.trim() || null,
+          prixTotal: parseFloat(editModal.prixTotal),
+          statut: editModal.statut,
+        }));
+      }
+
       await fetchLocalTraitements();
       await onRefresh?.();
 
@@ -363,6 +437,12 @@ export default function TraitementsTab({
 
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
+
+      if (selectedDetailTraitement?.id === traitementId) {
+        setSelectedDetailTraitement((prev) =>
+          prev ? { ...prev, statut: newStatus } : null
+        );
+      }
 
       await fetchLocalTraitements();
       await onRefresh?.();
@@ -421,53 +501,6 @@ export default function TraitementsTab({
       {/* ======================================================== */}
       {/* 📊 RÉSUMÉ FINANCIER RAPIDE DU PATIENT */}
       {/* ======================================================== */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <Card className="p-4 bg-gradient-to-br from-blue-50 to-white border-blue-200/80 shadow-sm rounded-2xl flex items-center justify-between">
-          <div>
-            <p className="text-xs font-medium text-blue-600 uppercase tracking-wider">
-              Total des soins
-            </p>
-            <p className="text-xl sm:text-2xl font-bold text-blue-950 mt-1">
-              {totalPrix.toLocaleString("fr-FR")} DZD
-            </p>
-          </div>
-          <div className="p-3 bg-blue-100 text-blue-700 rounded-xl">
-            <Activity className="w-5 h-5" />
-          </div>
-        </Card>
-
-        <Card className="p-4 bg-gradient-to-br from-emerald-50 to-white border-emerald-200/80 shadow-sm rounded-2xl flex items-center justify-between">
-          <div>
-            <p className="text-xs font-medium text-emerald-600 uppercase tracking-wider">
-              Total payé
-            </p>
-            <p className="text-xl sm:text-2xl font-bold text-emerald-950 mt-1">
-              {totalPaye.toLocaleString("fr-FR")} DZD
-            </p>
-          </div>
-          <div className="p-3 bg-emerald-100 text-emerald-700 rounded-xl">
-            <CheckCircle2 className="w-5 h-5" />
-          </div>
-        </Card>
-
-        <Card className="p-4 bg-gradient-to-br from-amber-50 to-white border-amber-200/80 shadow-sm rounded-2xl flex items-center justify-between">
-          <div>
-            <p className="text-xs font-medium text-amber-600 uppercase tracking-wider">
-              Reste à payer (Dette)
-            </p>
-            <p
-              className={`text-xl sm:text-2xl font-bold mt-1 ${
-                resteTotal > 0 ? "text-amber-700" : "text-emerald-700"
-              }`}
-            >
-              {resteTotal.toLocaleString("fr-FR")} DZD
-            </p>
-          </div>
-          <div className="p-3 bg-amber-100 text-amber-700 rounded-xl">
-            <DollarSign className="w-5 h-5" />
-          </div>
-        </Card>
-      </div>
 
       {/* ======================================================== */}
       {/* 🔍 BARRE D'ACTIONS ET FILTRES */}
@@ -514,14 +547,6 @@ export default function TraitementsTab({
             </button>
           ))}
         </div>
-
-        <Button
-          onClick={() => setShowNewModal(true)}
-          className="bg-[var(--color-600)] hover:bg-[var(--color-700)] text-white font-medium rounded-xl text-sm flex items-center gap-2"
-        >
-          <Plus size={16} />
-          Nouveau traitement
-        </Button>
       </div>
 
       {/* ======================================================== */}
@@ -557,21 +582,25 @@ export default function TraitementsTab({
               t.prixTotal > 0
                 ? Math.min(
                     100,
-                    Math.round(((t.totalPaye || 0) / t.prixTotal) * 100)
+                    Math.round(((t.totalPaye || 0) / t.prixTotal) * 100),
                   )
                 : 100;
 
             return (
               <Card
                 key={t.id}
-                className="overflow-hidden border border-slate-200 hover:border-[var(--color-300)] transition-all shadow-sm hover:shadow rounded-2xl bg-white"
+                onClick={() => {
+                  setSelectedDetailTraitement(t);
+                  setDetailModalOpen(true);
+                }}
+                className="overflow-hidden border border-slate-200 hover:border-[var(--color-400)] transition-all shadow-sm hover:shadow-md rounded-2xl bg-white cursor-pointer group"
               >
                 {/* Header de la carte de traitement */}
                 <div className="p-4 sm:p-5">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                     <div className="flex items-start gap-3">
                       {/* Badge Dent */}
-                      <div className="p-2.5 rounded-xl bg-[var(--color-100)] text-[var(--color-700)] flex flex-col items-center justify-center min-w-[56px] text-center shrink-0">
+                      <div className="p-2.5 rounded-xl bg-[var(--color-100)] text-[var(--color-700)] flex flex-col items-center justify-center min-w-[56px] text-center shrink-0 group-hover:scale-105 transition-transform">
                         <span className="text-[10px] font-semibold uppercase text-slate-500">
                           Dent
                         </span>
@@ -582,7 +611,7 @@ export default function TraitementsTab({
 
                       <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
-                          <h4 className="text-base sm:text-lg font-bold text-slate-900 truncate">
+                          <h4 className="text-base sm:text-lg font-bold text-slate-900 group-hover:text-[var(--color-700)] transition-colors truncate">
                             {t.description}
                           </h4>
 
@@ -622,8 +651,11 @@ export default function TraitementsTab({
                       {t.statut === "EN_COURS" && (
                         <Button
                           size="sm"
-                          onClick={() => onContinueTraitement?.(t)}
-                          className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-semibold shadow-sm flex items-center gap-1.5"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onContinueTraitement?.(t);
+                          }}
+                          className="bg-[var(--color-600)] hover:bg-[var(--color-700)] text-white rounded-xl text-xs font-semibold shadow-sm flex items-center gap-1.5"
                           title="Ouvrir une nouvelle consultation et continuer ce traitement"
                         >
                           <ArrowRight size={14} />
@@ -635,16 +667,17 @@ export default function TraitementsTab({
                         <Button
                           size="sm"
                           variant="outline"
-                          onClick={() =>
+                          onClick={(e) => {
+                            e.stopPropagation();
                             setVersementModal({
                               open: true,
                               traitement: t,
                               montant: "",
                               note: "",
                               date: new Date().toISOString().split("T")[0],
-                            })
-                          }
-                          className="border-emerald-300 text-emerald-700 hover:bg-emerald-50 rounded-xl text-xs font-medium flex items-center gap-1"
+                            });
+                          }}
+                          className="border-[var(--color-300)] text-[var(--color-700)] hover:bg-[var(--color-50)] rounded-xl text-xs font-medium flex items-center gap-1"
                         >
                           <CreditCard size={14} />
                           Versement
@@ -654,7 +687,8 @@ export default function TraitementsTab({
                       <Button
                         size="sm"
                         variant="ghost"
-                        onClick={() =>
+                        onClick={(e) => {
+                          e.stopPropagation();
                           setEditModal({
                             open: true,
                             id: t.id,
@@ -662,26 +696,28 @@ export default function TraitementsTab({
                             dent: t.dent || "",
                             prixTotal: t.prixTotal,
                             statut: t.statut,
-                          })
-                        }
+                          });
+                        }}
                         className="text-slate-600 hover:text-slate-900 rounded-xl text-xs"
                         title="Modifier le traitement"
                       >
                         <Edit3 size={15} />
                       </Button>
 
-                      <button
-                        type="button"
-                        onClick={() => toggleExpand(t.id)}
-                        className="p-1.5 text-slate-400 hover:text-slate-700 rounded-lg hover:bg-slate-100 transition"
-                        title="Afficher/Masquer les détails"
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedDetailTraitement(t);
+                          setDetailModalOpen(true);
+                        }}
+                        className="border-slate-200 text-slate-700 hover:bg-slate-50 rounded-xl text-xs font-medium flex items-center gap-1 shadow-2xs"
+                        title="Voir les détails complets du soin"
                       >
-                        {isExpanded ? (
-                          <ChevronUp size={20} />
-                        ) : (
-                          <ChevronDown size={20} />
-                        )}
-                      </button>
+                        <Eye size={14} />
+                        Détails
+                      </Button>
                     </div>
                   </div>
 
@@ -705,7 +741,7 @@ export default function TraitementsTab({
                         <strong
                           className={`font-bold ${
                             t.resteAPayer > 0
-                              ? "text-amber-700"
+                              ? "text-red-700"
                               : "text-emerald-700"
                           }`}
                         >
@@ -726,190 +762,6 @@ export default function TraitementsTab({
                     </div>
                   </div>
                 </div>
-
-                {/* ==================================================== */}
-                {/* 🔽 ZONE DÉPLIÉE : DÉTAIL DES SÉANCES, VERSEMENTS, RDV */}
-                {/* ==================================================== */}
-                {isExpanded && (
-                  <div className="bg-slate-50/70 p-4 sm:p-6 border-t border-slate-200 space-y-6">
-                    {/* Statut Switch Buttons */}
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-semibold text-slate-500">
-                        Changer le statut :
-                      </span>
-                      {["EN_COURS", "TERMINE", "ANNULE"].map((st) => (
-                        <button
-                          key={st}
-                          onClick={() => handleQuickStatusChange(t.id, st)}
-                          className={`px-2.5 py-1 rounded-lg text-xs font-medium transition ${
-                            t.statut === st
-                              ? "bg-slate-800 text-white font-semibold"
-                              : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-100"
-                          }`}
-                        >
-                          {st === "EN_COURS"
-                            ? "En cours"
-                            : st === "TERMINE"
-                            ? "Terminé"
-                            : "Annulé"}
-                        </button>
-                      ))}
-                    </div>
-
-                    {/* 1. Séances / Actes réalisés */}
-                    <div>
-                      <h5 className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-2 mb-2">
-                        <Sparkles size={14} className="text-indigo-600" />
-                        Séances & Actes cliniques ({sessionsCount})
-                      </h5>
-
-                      {sessionsCount === 0 ? (
-                        <p className="text-xs text-slate-500 italic bg-white p-3 rounded-xl border border-slate-200">
-                          Aucun acte enregistré pour ce traitement lors des
-                          consultations.
-                        </p>
-                      ) : (
-                        <div className="space-y-2">
-                          {t.consultationsTraitement.map((ct) => (
-                            <div
-                              key={ct.id}
-                              className="bg-white p-3 rounded-xl border border-slate-200 shadow-2xs flex items-start justify-between"
-                            >
-                              <div className="min-w-0">
-                                <p className="text-xs font-bold text-slate-900">
-                                  {ct.acteRealise || "Acte non spécifié"}
-                                </p>
-                                {ct.consultation && (
-                                  <p className="text-[11px] text-slate-500 mt-0.5">
-                                    Consultation #{ct.consultation.id} du{" "}
-                                    {new Date(
-                                      ct.consultation.createdAt
-                                    ).toLocaleDateString("fr-FR")}
-                                    {ct.consultation.motifDeConsultation &&
-                                      ` • Motif : ${ct.consultation.motifDeConsultation}`}
-                                  </p>
-                                )}
-                              </div>
-                              <span className="text-[11px] text-slate-400 shrink-0 ml-2">
-                                {new Date(ct.createdAt).toLocaleDateString(
-                                  "fr-FR"
-                                )}
-                              </span>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-
-                    {/* 2. Versements effectués */}
-                    <div>
-                      <div className="flex items-center justify-between mb-2">
-                        <h5 className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-2">
-                          <DollarSign size={14} className="text-emerald-600" />
-                          Versements effectués ({versementsCount})
-                        </h5>
-                        {t.resteAPayer > 0 && (
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setVersementModal({
-                                open: true,
-                                traitement: t,
-                                montant: "",
-                                note: "",
-                                date: new Date().toISOString().split("T")[0],
-                              })
-                            }
-                            className="text-xs text-emerald-700 font-semibold hover:underline"
-                          >
-                            + Ajouter un versement
-                          </button>
-                        )}
-                      </div>
-
-                      {versementsCount === 0 ? (
-                        <p className="text-xs text-slate-500 italic bg-white p-3 rounded-xl border border-slate-200">
-                          Aucun versement enregistré pour ce traitement.
-                        </p>
-                      ) : (
-                        <div className="space-y-2">
-                          {t.versements.map((v) => (
-                            <div
-                              key={v.id}
-                              className="bg-white p-3 rounded-xl border border-slate-200 shadow-2xs flex items-center justify-between"
-                            >
-                              <div>
-                                <span className="text-sm font-bold text-emerald-700">
-                                  {v.montant.toLocaleString("fr-FR")} DZD
-                                </span>
-                                {v.note && (
-                                  <span className="text-xs text-slate-600 ml-2">
-                                    ({v.note})
-                                  </span>
-                                )}
-                                <span className="text-[11px] text-slate-400 block mt-0.5">
-                                  Le{" "}
-                                  {new Date(v.date).toLocaleDateString("fr-FR")}
-                                </span>
-                              </div>
-
-                              <button
-                                type="button"
-                                onClick={() => handleDeleteVersement(v.id)}
-                                className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition"
-                                title="Supprimer ce versement"
-                              >
-                                <Trash2 size={14} />
-                              </button>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-
-                    {/* 3. Rendez-vous associés */}
-                    {rendezVousCount > 0 && (
-                      <div>
-                        <h5 className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-2 mb-2">
-                          <Calendar size={14} className="text-amber-600" />
-                          Prochains rendez-vous liés ({rendezVousCount})
-                        </h5>
-                        <div className="space-y-2">
-                          {t.rendezVous.map((rdv) => (
-                            <div
-                              key={rdv.id}
-                              className="bg-white p-3 rounded-xl border border-amber-200/80 shadow-2xs flex items-center justify-between"
-                            >
-                              <div className="flex items-center gap-2">
-                                <Clock size={15} className="text-amber-600" />
-                                <div>
-                                  <p className="text-xs font-semibold text-slate-800">
-                                    {new Date(rdv.date).toLocaleDateString(
-                                      "fr-FR"
-                                    )}{" "}
-                                    à{" "}
-                                    {new Date(rdv.date).toLocaleTimeString(
-                                      "fr-FR",
-                                      {
-                                        hour: "2-digit",
-                                        minute: "2-digit",
-                                      }
-                                    )}
-                                  </p>
-                                  <p className="text-[11px] text-slate-500">
-                                    {rdv.description ||
-                                      rdv.note ||
-                                      "Séance de soin"}
-                                  </p>
-                                </div>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
               </Card>
             );
           })}
@@ -1074,7 +926,7 @@ export default function TraitementsTab({
               </span>
               <span className="font-bold text-emerald-950 text-sm">
                 {(versementModal.traitement?.resteAPayer || 0).toLocaleString(
-                  "fr-FR"
+                  "fr-FR",
                 )}{" "}
                 DZD
               </span>
@@ -1255,7 +1107,9 @@ export default function TraitementsTab({
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => setEditModal((prev) => ({ ...prev, open: false }))}
+                onClick={() =>
+                  setEditModal((prev) => ({ ...prev, open: false }))
+                }
                 className="rounded-xl"
               >
                 Annuler
@@ -1265,13 +1119,48 @@ export default function TraitementsTab({
                 disabled={savingEdit || !editModal.description.trim()}
                 className="bg-[var(--color-600)] hover:bg-[var(--color-700)] text-white rounded-xl"
               >
-                {savingEdit ? "Enregistrement..." : "Enregistrer les modifications"}
+                {savingEdit
+                  ? "Enregistrement..."
+                  : "Enregistrer les modifications"}
               </Button>
             </DialogFooter>
           </form>
         </DialogContent>
       </Dialog>
+
+      {/* ======================================================== */}
+      {/* 🔍 MODAL DÉTAILS DU TRAITEMENT */}
+      {/* ======================================================== */}
+      <TraitementDetailModal
+        open={detailModalOpen}
+        onOpenChange={(open) => {
+          setDetailModalOpen(open);
+          if (!open) setSelectedDetailTraitement(null);
+        }}
+        traitement={selectedDetailTraitement}
+        onContinue={(t) => {
+          setDetailModalOpen(false);
+          onContinueTraitement?.(t);
+        }}
+        onUpdated={async (updated) => {
+          setSelectedDetailTraitement((prev) =>
+            prev?.id === updated.id ? { ...prev, ...updated } : prev,
+          );
+          await fetchLocalTraitements();
+          await onRefresh?.();
+        }}
+        onAddVersement={(t) => {
+          setVersementModal({
+            open: true,
+            traitement: t,
+            montant: "",
+            note: "",
+            date: new Date().toISOString().split("T")[0],
+          });
+        }}
+        onDeleteVersement={handleDeleteVersement}
+        onQuickStatusChange={handleQuickStatusChange}
+      />
     </div>
   );
 }
-

@@ -63,6 +63,8 @@ export default function PatientDashboard() {
   const [patientsData, setPatients] = useState([]);
   const [loading, setLoading] = useState(true);
   const [ShowAddDialogNewAnalyse, setShowAddDialogNewAnalyse] = useState(false);
+  const [showNewTraitement, setShowNewTraitement] = useState(false);
+  const [showNewVersement, setShowNewVersement] = useState(false);
   const [NewConsultationData, setNewConsultationData] = useState(null);
   const [lastid, setlastid] = useState(null);
   const [openNewordanance, setnewordanance] = useState(false);
@@ -879,10 +881,22 @@ export default function PatientDashboard() {
                 >
                   <Plus className="mr-2 h-4 w-4" /> Nouvelle Prescription / Bilan / Justification
                 </Button>
+              ) : selectedtab === "Traitements" ? (
+                <Button
+                  onClick={() => setShowNewTraitement(true)}
+                  className="flex items-center gap-2 bg-[var(--color-600)] hover:bg-[var(--color-700)] text-white font-medium px-5 py-2 rounded-xl shadow-md transition"
+                >
+                  <Plus className="mr-2 h-4 w-4" /> Nouveau traitement
+                </Button>
+              ) : selectedtab === "Finances & Crédits" ? (
+                <Button
+                  onClick={() => setShowNewVersement(true)}
+                  className="flex items-center gap-2 bg-[var(--color-600)] hover:bg-[var(--color-700)] text-white font-medium px-5 py-2 rounded-xl shadow-md transition"
+                >
+                  <Plus className="mr-2 h-4 w-4" /> Nouveau versement
+                </Button>
               ) : selectedtab === "Visites" ||
-                selectedtab === "Informations Patient" ||
-                selectedtab === "Traitements" ||
-                selectedtab === "Finances & Crédits" ? (
+                selectedtab === "Informations Patient" ? (
                 <Button
                   onClick={() => {
                     setNewConsultation(true);
@@ -1126,6 +1140,10 @@ export default function PatientDashboard() {
               {selectedtab === "Traitements" && (
                 <TraitementsTab
                   patient={selectedPatient}
+                  selectedPatient={selectedPatient}
+                  patientId={selectedPatient?.id}
+                  showNewTraitementModal={showNewTraitement}
+                  setShowNewTraitementModal={setShowNewTraitement}
                   onContinueTraitement={(traitement) => {
                     setPreselectedTraitement(traitement);
                     setselectedtab("+ Nouvelle Consultation");
@@ -1136,6 +1154,10 @@ export default function PatientDashboard() {
               {selectedtab === "Finances & Crédits" && (
                 <FinancesPatientTab
                   patient={selectedPatient}
+                  selectedPatient={selectedPatient}
+                  patientId={selectedPatient?.id}
+                  showNewVersementModal={showNewVersement}
+                  setShowNewVersementModal={setShowNewVersement}
                   onRefresh={() => fetchPatientById(selectedPatient?.id)}
                 />
               )}

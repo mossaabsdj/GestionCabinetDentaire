@@ -39,11 +39,7 @@ export async function POST(request) {
     const {
       patientId,
       consultationId,
-      titre,
       texte,
-      dateDebut,
-      dateFin,
-      duree,
       createdAt,
     } = body;
 
@@ -58,11 +54,7 @@ export async function POST(request) {
       data: {
         patientId: Number(patientId),
         consultationId: consultationId ? Number(consultationId) : null,
-        titre: titre || "Justification médicale",
         texte: texte.trim(),
-        dateDebut: dateDebut ? new Date(dateDebut) : null,
-        dateFin: dateFin ? new Date(dateFin) : null,
-        duree: duree || null,
         createdAt: createdAt ? new Date(createdAt) : undefined,
       },
       include: {
@@ -87,7 +79,7 @@ export async function POST(request) {
 export async function PUT(request) {
   try {
     const body = await request.json();
-    const { id, titre, texte, dateDebut, dateFin, duree } = body;
+    const { id, texte } = body;
 
     if (!id) {
       return NextResponse.json(
@@ -99,11 +91,7 @@ export async function PUT(request) {
     const updated = await prisma.justification.update({
       where: { id: Number(id) },
       data: {
-        titre: titre || undefined,
         texte: texte !== undefined ? texte.trim() : undefined,
-        dateDebut: dateDebut !== undefined ? (dateDebut ? new Date(dateDebut) : null) : undefined,
-        dateFin: dateFin !== undefined ? (dateFin ? new Date(dateFin) : null) : undefined,
-        duree: duree !== undefined ? duree : undefined,
       },
       include: {
         patient: true,

@@ -94,24 +94,41 @@ export async function PUT(request) {
       );
     }
 
+    const ordId = Number(id);
+    const existing = await prisma.ordonnance.findUnique({
+      where: { id: ordId },
+    });
+
+    if (!existing) {
+      return NextResponse.json(
+        { error: "Ordonnance non trouvée" },
+        { status: 404 },
+      );
+    }
+
     // 🧹 Delete existing items before updating
     await prisma.ordonnanceItem.deleteMany({
-      where: { ordonnanceId: id },
+      where: { ordonnanceId: ordId },
     });
 
     // 🔁 Update ordonnance and re-create items
     const updatedOrdonnance = await prisma.ordonnance.update({
-      where: { id },
+      where: { id: ordId },
       data: {
-        patientId,
-        consultationId: consultationId || null,
+        patientId: patientId ? Number(patientId) : existing.patientId,
+        consultationId:
+          consultationId !== undefined
+            ? consultationId
+              ? Number(consultationId)
+              : null
+            : existing.consultationId,
         items: {
-          create: items.map((item) => ({
-            medicamentId: item.medicamentId,
-            dosage: item.dosage,
-            frequence: item.frequence,
-            duree: item.duree,
-            quantite: item.quantite,
+          create: (items || []).map((item) => ({
+            medicamentId: Number(item.medicamentId || item.id),
+            dosage: item.dosage || "",
+            frequence: item.frequence || "",
+            duree: item.duree || "",
+            quantite: Number(item.quantite) > 0 ? Number(item.quantite) : 1,
           })),
         },
       },

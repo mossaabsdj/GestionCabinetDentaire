@@ -45,8 +45,15 @@ export default function PrescriptionModal({
   selectedPatient,
   initialData = null,
   initialTab = "ordonnance",
+  editMode = false,
+  editDocType = null,
+  editDocId = null,
+  onSaveEdit = null,
+  isSavingEdit = false,
 }) {
-  const [activeTab, setActiveTab] = useState(initialTab || "ordonnance");
+  const [activeTab, setActiveTab] = useState(
+    initialTab === "bilan" ? "labs" : initialTab || "ordonnance"
+  );
   const [query, setQuery] = useState("");
   const [suggestions, setSuggestions] = useState([]);
   const [selectedMed, setSelectedMed] = useState(null);
@@ -259,7 +266,9 @@ export default function PrescriptionModal({
     }
     const q = labQuery.trim().toLowerCase();
     const filtered = bilans.filter(
-      (e) => e.nom.toLowerCase().includes(q) && !labItems.includes(e),
+      (e) =>
+        e.nom.toLowerCase().includes(q) &&
+        !labItems.some((l) => (l.id && e.id ? l.id === e.id : l === e)),
     );
     setLabSuggestions(filtered);
     setHighlightedLabIdx(filtered.length > 0 ? 0 : -1);
@@ -358,7 +367,9 @@ export default function PrescriptionModal({
   }
 
   function addLab(exam) {
-    if (!labItems.includes(exam)) setLabItems([...labItems, exam]);
+    if (!labItems.some((i) => (i.id && exam.id ? i.id === exam.id : i === exam))) {
+      setLabItems([...labItems, exam]);
+    }
     setLabQuery("");
 
     // Return focus to lab search
@@ -368,30 +379,39 @@ export default function PrescriptionModal({
   }
 
   function removeLab(exam) {
-    setLabItems(labItems.filter((i) => i !== exam));
+    setLabItems(
+      labItems.filter((i) => (i.id && exam.id ? i.id !== exam.id : i !== exam)),
+    );
   }
 
-  function handleSave() {
+  async function handleSave() {
+    if (editMode && onSaveEdit) {
+      await onSaveEdit({
+        editDocType,
+        editDocId,
+        prescriptionItems,
+        labItems,
+        justifText,
+      });
+      return;
+    }
+
     const ordonnance = {
       items: prescriptionItems,
     };
     const bilanRecip = {
       items: labItems,
     };
-    const selectedJustifObj = justifTypes.find(
-      (t) => t.id === justifType || t.id === Number(justifType),
-    );
     const payload = {
       ordonnance: ordonnance,
       bilanRecip: bilanRecip,
       justification: justifText.trim()
         ? {
-            titre: selectedJustifObj?.nom || "Justification médicale",
             texte: justifText.trim(),
           }
         : null,
     };
-    onsave(payload);
+    onsave?.(payload);
     console.log("✅ Saved:", payload);
   }
 
@@ -444,25 +464,52 @@ export default function PrescriptionModal({
   useEffect(() => {
     if (open) {
       if (initialTab) {
-        setActiveTab(initialTab);
+        setActiveTab(initialTab === "bilan" ? "labs" : initialTab);
       }
       if (initialData) {
         if (Array.isArray(initialData.ordonnance?.items)) {
-          setPrescriptionItems(initialData.ordonnance.items);
+          setPrescriptionItems(
+            initialData.ordonnance.items.map((it) => ({
+              medicamentId: it.medicamentId || it.medicament?.id || it.id,
+              nom: it.medicament?.nom || it.nom || it.name || "",
+              form: it.form || it.medicament?.form || "",
+              dosage: it.dosage || "",
+              frequence: it.frequence || it.frequency || "",
+              duree: it.duree || it.duration || "",
+              quantite:
+                Number(it.quantite || it.quantity) > 0
+                  ? Number(it.quantite || it.quantity)
+                  : 1,
+            }))
+          );
+        } else if (!editMode) {
+          setPrescriptionItems([]);
         }
+
         if (Array.isArray(initialData.bilanRecip?.items)) {
-          setLabItems(initialData.bilanRecip.items);
+          setLabItems(
+            initialData.bilanRecip.items.map((it) => ({
+              id: it.bilan?.id || it.bilanId || it.id,
+              nom: it.bilan?.nom || it.nom || it.name || "",
+              bilanId: it.bilanId || it.bilan?.id || it.id,
+              resultat: it.resultat || null,
+              remarque: it.remarque || null,
+            }))
+          );
+        } else if (!editMode) {
+          setLabItems([]);
         }
+
         if (initialData.justification) {
-          const txt =
-            typeof initialData.justification === "string"
-              ? initialData.justification
-              : initialData.justification.texte || "";
+          const j = initialData.justification;
+          const txt = typeof j === "string" ? j : j.texte || "";
           setJustifText(txt);
+        } else if (!editMode) {
+          setJustifText("");
         }
       }
     }
-  }, [open, initialData, initialTab]);
+  }, [open, initialData, initialTab, editMode]);
 
   useEffect(() => {
     if (justifType && justifType !== "autre") {
@@ -647,10 +694,6 @@ export default function PrescriptionModal({
 
       const nextConsultationId = (data.lastConsultationId || 0) + 1;
       const nextJustificationId = (data.lastJustificationId || 0) + 1;
-      const selectedObj = justifTypes.find(
-        (t) => t.id === justifType || t.id === Number(justifType),
-      );
-
       // 🖨️ Send to printer
       printJustification({
         consultationId: nextConsultationId,
@@ -658,7 +701,6 @@ export default function PrescriptionModal({
         nom,
         prenom,
         age,
-        titre: selectedObj?.nom || "JUSTIFICATION MÉDICALE",
         texte: justifText.trim(),
       });
     } catch (error) {
@@ -796,28 +838,47 @@ export default function PrescriptionModal({
           transition={{ duration: 0.3 }}
         >
           <Tabs value={activeTab} onValueChange={setActiveTab}>
-            <TabsList className="grid grid-cols-3 bg-gradient-to-r from-[var(--color-100)] to-[var(--color-50)] text-[var(--color-700)] rounded-xl p-1 shadow-sm">
-              <TabsTrigger
-                value="ordonnance"
-                className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-md transition-all duration-200"
-              >
-                <Pill className="w-4 h-4 mr-2" />
-                Ordonnance
-              </TabsTrigger>
-              <TabsTrigger
-                value="labs"
-                className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-md transition-all duration-200"
-              >
-                <FlaskConical className="w-4 h-4 mr-2" />
-                Bilans & Analyses
-              </TabsTrigger>
-              <TabsTrigger
-                value="justif"
-                className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-md transition-all duration-200"
-              >
-                <FileText className="w-4 h-4 mr-2" />
-                Justification
-              </TabsTrigger>
+            <TabsList
+              className={`grid ${
+                editMode ? "grid-cols-1" : "grid-cols-3"
+              } bg-gradient-to-r from-[var(--color-100)] to-[var(--color-50)] text-[var(--color-700)] rounded-xl p-1 shadow-sm`}
+            >
+              {(!editMode || editDocType === "ordonnance" || editDocType === "ord") && (
+                <TabsTrigger
+                  value="ordonnance"
+                  disabled={editMode && editDocType !== "ordonnance" && editDocType !== "ord"}
+                  className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-md transition-all duration-200"
+                >
+                  <Pill className="w-4 h-4 mr-2" />
+                  {editMode
+                    ? `Modifier l'Ordonnance #${editDocId || ""}`
+                    : "Ordonnance"}
+                </TabsTrigger>
+              )}
+              {(!editMode || editDocType === "bilan" || editDocType === "labs") && (
+                <TabsTrigger
+                  value="labs"
+                  disabled={editMode && editDocType !== "bilan" && editDocType !== "labs"}
+                  className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-md transition-all duration-200"
+                >
+                  <FlaskConical className="w-4 h-4 mr-2" />
+                  {editMode
+                    ? `Modifier le Bilan #${editDocId || ""}`
+                    : "Bilans & Analyses"}
+                </TabsTrigger>
+              )}
+              {(!editMode || editDocType === "justif" || editDocType === "justification") && (
+                <TabsTrigger
+                  value="justif"
+                  disabled={editMode && editDocType !== "justif" && editDocType !== "justification"}
+                  className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-md transition-all duration-200"
+                >
+                  <FileText className="w-4 h-4 mr-2" />
+                  {editMode
+                    ? `Modifier la Justification #${editDocId || ""}`
+                    : "Justification"}
+                </TabsTrigger>
+              )}
             </TabsList>
 
             {/* Ordonnance */}
@@ -1633,6 +1694,7 @@ export default function PrescriptionModal({
                           </SelectContent>
                         </Select>
                       </div>
+
                       <div>
                         <Label
                           htmlFor="justif-text"
@@ -1663,24 +1725,55 @@ export default function PrescriptionModal({
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.2 }}
           >
-            <Button
-              variant="ghost"
-              className="text-red-500 hover:bg-red-50 transition-all duration-200"
-              onClick={() => {
-                setPrescriptionItems([]);
-                setLabItems([]);
-                setJustifType(undefined);
-                setJustifText("");
-              }}
-            >
-              Tout réinitialiser
-            </Button>
-            <Button
-              className="bg-gradient-to-r from-[var(--color-600)] to-[var(--color-700)] hover:from-[var(--color-700)] hover:to-[var(--color-800)] shadow-lg hover:shadow-xl transition-all duration-200"
-              onClick={handleSave}
-            >
-              Sauvegarder tout
-            </Button>
+            {editMode ? (
+              <>
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={isSavingEdit}
+                  className="border-slate-300 text-slate-700 hover:bg-slate-100"
+                  onClick={() => onOpenChange(false)}
+                >
+                  Annuler
+                </Button>
+                <Button
+                  type="button"
+                  disabled={isSavingEdit}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white shadow-md flex items-center gap-2"
+                  onClick={handleSave}
+                >
+                  {isSavingEdit ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Enregistrement...
+                    </>
+                  ) : (
+                    "💾 Enregistrer les modifications"
+                  )}
+                </Button>
+              </>
+            ) : (
+              <>
+                <Button
+                  variant="ghost"
+                  className="text-red-500 hover:bg-red-50 transition-all duration-200"
+                  onClick={() => {
+                    setPrescriptionItems([]);
+                    setLabItems([]);
+                    setJustifType(undefined);
+                    setJustifText("");
+                  }}
+                >
+                  Tout réinitialiser
+                </Button>
+                <Button
+                  className="bg-gradient-to-r from-[var(--color-600)] to-[var(--color-700)] hover:from-[var(--color-700)] hover:to-[var(--color-800)] shadow-lg hover:shadow-xl transition-all duration-200"
+                  onClick={handleSave}
+                >
+                  Sauvegarder tout
+                </Button>
+              </>
+            )}
           </motion.div>
         </motion.div>
         <DialogAlert

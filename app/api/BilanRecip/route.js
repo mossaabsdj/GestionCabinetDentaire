@@ -137,7 +137,7 @@ export async function PUT(request) {
         items: {
           create:
             items.map((it) => ({
-              bilanId: it.bilanId,
+              bilanId: Number(it.bilanId || it.id),
               resultat: it.resultat || null,
               remarque: it.remarque || null,
             })) || [],

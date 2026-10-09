@@ -11,9 +11,10 @@ import {
   DialogFooter,
   DialogDescription,
 } from "@/components/ui/dialog";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Calendar, Trash2, FileText, Clock } from "lucide-react";
+import { Calendar, Trash2, FileText, Clock, Edit3, Loader2 } from "lucide-react";
 import { printOrdonnance, printBilan, printJustification } from "@/lib/printer";
+import Swal from "sweetalert2";
+import NewOrdanance from "@/app/component/NewOrdanance/page";
 // ✅ Pediatric Age Calculation
 function calculateAge(dateString) {
   if (!dateString) return "";
@@ -68,6 +69,16 @@ export default function OrdBilanPage({
   const [filtredOrd, setFiltredOrd] = useState([]);
   const [filtredBilan, setFiltredBilan] = useState([]);
   const [filtredJustif, setFiltredJustif] = useState([]);
+
+  // ✏️ Edit Modal state
+  const [editModal, setEditModal] = useState({
+    open: false,
+    type: null, // "ord" | "bilan" | "justif"
+    id: null,
+    item: null,
+    initialData: null,
+  });
+  const [savingEdit, setSavingEdit] = useState(false);
 
   // 🧾 Fetch ordonnances
   const fetchOrdonnances = async () => {
@@ -138,7 +149,6 @@ export default function OrdBilanPage({
         const matchesQuery =
           !q ||
           v.id.toString().includes(q) ||
-          (v.titre && v.titre.toLowerCase().includes(q)) ||
           (v.texte && v.texte.toLowerCase().includes(q));
         const matchesDate = isSameDate(v.createdAt, dateFilter);
         return matchesQuery && matchesDate;
@@ -179,11 +189,204 @@ export default function OrdBilanPage({
     }
   };
 
+  // ✏️ Open Edit Modal for a single document
+  const handleOpenEdit = (type, item) => {
+    if (!item) return;
+    if (type === "ord") {
+      setEditModal({
+        open: true,
+        type: "ord",
+        id: item.id,
+        item,
+        initialData: {
+          ordonnance: {
+            items: (item.items || []).map((it) => ({
+              medicamentId: it.medicamentId || it.medicament?.id || it.id,
+              nom: it.medicament?.nom || it.nom || "",
+              form: it.medicament?.form || it.form || "",
+              dosage: it.dosage || "",
+              frequence: it.frequence || "",
+              duree: it.duree || "",
+              quantite: Number(it.quantite) > 0 ? Number(it.quantite) : 1,
+            })),
+          },
+        },
+      });
+    } else if (type === "bilan") {
+      setEditModal({
+        open: true,
+        type: "bilan",
+        id: item.id,
+        item,
+        initialData: {
+          bilanRecip: {
+            items: (item.items || []).map((it) => ({
+              id: it.bilan?.id || it.bilanId || it.id,
+              nom: it.bilan?.nom || it.nom || "",
+              bilanId: it.bilanId || it.bilan?.id || it.id,
+              resultat: it.resultat || null,
+              remarque: it.remarque || null,
+            })),
+          },
+        },
+      });
+    } else if (type === "justif") {
+      setEditModal({
+        open: true,
+        type: "justif",
+        id: item.id,
+        item,
+        initialData: {
+          justification: {
+            id: item.id,
+            texte: item.texte || "",
+          },
+        },
+      });
+    }
+  };
+
+  // 💾 Save Edited Document
+  const handleSaveEdit = async (data) => {
+    setSavingEdit(true);
+    try {
+      if (editModal.type === "ord") {
+        if (!data.prescriptionItems || data.prescriptionItems.length === 0) {
+          Swal.fire({
+            icon: "warning",
+            title: "Attention",
+            text: "L'ordonnance doit contenir au moins un médicament.",
+          });
+          return;
+        }
+
+        const res = await fetch("/api/Ordonnance", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            id: editModal.id,
+            items: data.prescriptionItems.map((it) => ({
+              medicamentId: it.medicamentId,
+              dosage: it.dosage || "",
+              frequence: it.frequence || "",
+              duree: it.duree || "",
+              quantite: Number(it.quantite) > 0 ? Number(it.quantite) : 1,
+            })),
+          }),
+        });
+
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(
+            errData.error || "Erreur lors de la mise à jour de l'ordonnance"
+          );
+        }
+
+        await fetchOrdonnances();
+        setEditModal({ open: false, type: null, id: null, item: null, initialData: null });
+        Swal.fire({
+          icon: "success",
+          title: "Succès",
+          text: "Ordonnance modifiée avec succès !",
+          timer: 1800,
+          showConfirmButton: false,
+        });
+      } else if (editModal.type === "bilan") {
+        if (!data.labItems || data.labItems.length === 0) {
+          Swal.fire({
+            icon: "warning",
+            title: "Attention",
+            text: "Le bilan doit contenir au moins un examen.",
+          });
+          return;
+        }
+
+        const res = await fetch("/api/BilanRecip", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            id: editModal.id,
+            items: data.labItems.map((it) => ({
+              bilanId: it.bilanId || it.id,
+              resultat: it.resultat || null,
+              remarque: it.remarque || null,
+            })),
+          }),
+        });
+
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(
+            errData.error || "Erreur lors de la mise à jour du bilan"
+          );
+        }
+
+        await fetchBilans();
+        setEditModal({ open: false, type: null, id: null, item: null, initialData: null });
+        Swal.fire({
+          icon: "success",
+          title: "Succès",
+          text: "Bilan modifié avec succès !",
+          timer: 1800,
+          showConfirmButton: false,
+        });
+      } else if (editModal.type === "justif") {
+        if (!data.justifText || !data.justifText.trim()) {
+          Swal.fire({
+            icon: "warning",
+            title: "Attention",
+            text: "Le texte de la justification ne peut pas être vide.",
+          });
+          return;
+        }
+
+        const res = await fetch("/api/Justifications", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            id: editModal.id,
+            texte: data.justifText.trim(),
+          }),
+        });
+
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(
+            errData.error || "Erreur lors de la mise à jour de la justification"
+          );
+        }
+
+        await fetchJustifications();
+        setEditModal({ open: false, type: null, id: null, item: null, initialData: null });
+        Swal.fire({
+          icon: "success",
+          title: "Succès",
+          text: "Justification modifiée avec succès !",
+          timer: 1800,
+          showConfirmButton: false,
+        });
+      }
+    } catch (err) {
+      console.error("❌ Erreur lors de la modification:", err);
+      Swal.fire({
+        icon: "error",
+        title: "Erreur",
+        text: err.message || "Une erreur est survenue lors de l'enregistrement.",
+      });
+    } finally {
+      setSavingEdit(false);
+    }
+  };
+
   // 🖨️ Print Ordonnance
   const handlePrintOrdonnanceElectron = async (ord) => {
     try {
       if (!ord.items || ord.items.length === 0) {
-        alert("Aucune donnée à imprimer");
+        Swal.fire({
+          icon: "info",
+          title: "Information",
+          text: "Aucune donnée à imprimer.",
+        });
         return;
       }
       // console.log(JSON.stringify(ord));
@@ -230,7 +433,11 @@ export default function OrdBilanPage({
       });
     } catch (err) {
       console.error("Erreur lors de l'impression de l'ordonnance:", err);
-      alert("Erreur lors de l'impression de l'ordonnance.");
+      Swal.fire({
+        icon: "error",
+        title: "Erreur",
+        text: "Erreur lors de l'impression de l'ordonnance.",
+      });
     }
   };
 
@@ -238,7 +445,11 @@ export default function OrdBilanPage({
   const handlePrintBilanElectron = async (bilan) => {
     try {
       if (!bilan.items || bilan.items.length === 0) {
-        alert("Aucun examen à imprimer");
+        Swal.fire({
+          icon: "info",
+          title: "Information",
+          text: "Aucun examen à imprimer.",
+        });
         return;
       }
       // console.log(JSON.stringify(bilan));
@@ -277,7 +488,11 @@ export default function OrdBilanPage({
       });
     } catch (err) {
       console.error("Erreur lors de l'impression du bilan:", err);
-      alert("Erreur lors de l'impression du bilan.");
+      Swal.fire({
+        icon: "error",
+        title: "Erreur",
+        text: "Erreur lors de l'impression du bilan.",
+      });
     }
   };
 
@@ -302,10 +517,20 @@ export default function OrdBilanPage({
 
       //   setBilans((prev) => prev.map((b) => (b.id === bilan.id ? updated : b)));
       fetchBilans();
-      alert("✅ Bilan mis à jour avec succès !");
+      Swal.fire({
+        icon: "success",
+        title: "Succès",
+        text: "Bilan mis à jour avec succès !",
+        timer: 1500,
+        showConfirmButton: false,
+      });
     } catch (err) {
       console.error("❌ Erreur lors de la sauvegarde du bilan:", err);
-      alert("Erreur lors de la sauvegarde du bilan.");
+      Swal.fire({
+        icon: "error",
+        title: "Erreur",
+        text: "Erreur lors de la sauvegarde du bilan.",
+      });
     }
   };
   // 🧠 Handle input change for Bilan item (résultat / remarque)
@@ -341,7 +566,11 @@ export default function OrdBilanPage({
   const handlePrintJustificationElectron = async (justif) => {
     try {
       if (!justif.texte || !justif.texte.trim()) {
-        alert("Aucun texte de justification à imprimer");
+        Swal.fire({
+          icon: "info",
+          title: "Information",
+          text: "Aucun texte de justification à imprimer.",
+        });
         return;
       }
       const fullname = selectedPatient?.nom || "";
@@ -366,15 +595,15 @@ export default function OrdBilanPage({
         nom,
         prenom,
         age,
-        titre: justif.titre || "JUSTIFICATION MÉDICALE",
         texte: justif.texte,
-        duree: justif.duree,
-        dateDebut: justif.dateDebut,
-        dateFin: justif.dateFin,
       });
     } catch (err) {
       console.error("Erreur lors de l'impression de la justification:", err);
-      alert("Erreur lors de l'impression de la justification.");
+      Swal.fire({
+        icon: "error",
+        title: "Erreur",
+        text: "Erreur lors de l'impression de la justification.",
+      });
     }
   };
 
@@ -386,20 +615,26 @@ export default function OrdBilanPage({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           id: justif.id,
-          titre: justif.titre,
           texte: justif.texte,
-          duree: justif.duree,
-          dateDebut: justif.dateDebut,
-          dateFin: justif.dateFin,
         }),
       });
 
       if (!res.ok) throw new Error("Erreur lors de la sauvegarde de la justification");
       fetchJustifications();
-      alert("✅ Justification mise à jour avec succès !");
+      Swal.fire({
+        icon: "success",
+        title: "Succès",
+        text: "Justification mise à jour avec succès !",
+        timer: 1500,
+        showConfirmButton: false,
+      });
     } catch (err) {
       console.error("❌ Erreur lors de la sauvegarde de la justification:", err);
-      alert("Erreur lors de la sauvegarde de la justification.");
+      Swal.fire({
+        icon: "error",
+        title: "Erreur",
+        text: "Erreur lors de la sauvegarde de la justification.",
+      });
     }
   };
 
@@ -501,17 +736,32 @@ export default function OrdBilanPage({
                             </div>
                           </td>
                           <td className="px-6 py-4">
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              className="h-8 w-8 hover:bg-red-50"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                confirmDelete("ord", ord);
-                              }}
-                            >
-                              <Trash2 size={18} className="text-red-500" />
-                            </Button>
+                            <div className="flex items-center gap-1">
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="h-8 w-8 hover:bg-[var(--color-100)] text-[var(--color-700)] transition-colors"
+                                title="Modifier l'ordonnance"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleOpenEdit("ord", ord);
+                                }}
+                              >
+                                <Edit3 size={17} />
+                              </Button>
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="h-8 w-8 hover:bg-red-50 text-red-500 hover:text-red-700 transition-colors"
+                                title="Supprimer l'ordonnance"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  confirmDelete("ord", ord);
+                                }}
+                              >
+                                <Trash2 size={17} />
+                              </Button>
+                            </div>
                           </td>
                         </tr>
 
@@ -566,7 +816,18 @@ export default function OrdBilanPage({
                                 </table>
                               </div>
 
-                              <div className="flex justify-end mt-4">
+                              <div className="flex justify-end gap-2 mt-4">
+                                <Button
+                                  variant="outline"
+                                  onClick={() => {
+                                    setSelectedOrdonnance(null);
+                                    handleOpenEdit("ord", ord);
+                                  }}
+                                  className="border-[var(--color-300)] text-[var(--color-700)] hover:bg-[var(--color-50)]"
+                                >
+                                  <Edit3 size={16} className="mr-1.5" />
+                                  Modifier
+                                </Button>
                                 <Button
                                   onClick={() =>
                                     handlePrintOrdonnanceElectron(ord)
@@ -645,17 +906,32 @@ export default function OrdBilanPage({
                             </div>
                           </td>
                           <td className="px-6 py-4">
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              className="h-8 w-8 hover:bg-red-50"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                confirmDelete("bilan", bilan);
-                              }}
-                            >
-                              <Trash2 size={18} className="text-red-500" />
-                            </Button>
+                            <div className="flex items-center gap-1">
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="h-8 w-8 hover:bg-blue-100 text-blue-600 hover:text-blue-800 transition-colors"
+                                title="Modifier le bilan"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleOpenEdit("bilan", bilan);
+                                }}
+                              >
+                                <Edit3 size={17} />
+                              </Button>
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="h-8 w-8 hover:bg-red-50 text-red-500 hover:text-red-700 transition-colors"
+                                title="Supprimer le bilan"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  confirmDelete("bilan", bilan);
+                                }}
+                              >
+                                <Trash2 size={17} />
+                              </Button>
+                            </div>
                           </td>
                         </tr>
 
@@ -732,6 +1008,17 @@ export default function OrdBilanPage({
                                 </div>
 
                                 <div className="flex justify-end gap-2 mt-4">
+                                  <Button
+                                    variant="outline"
+                                    onClick={() => {
+                                      setSelectedBilan(null);
+                                      handleOpenEdit("bilan", selectedBilan);
+                                    }}
+                                    className="border-blue-300 text-blue-700 hover:bg-blue-50"
+                                  >
+                                    <Edit3 size={16} className="mr-1.5" />
+                                    Modifier
+                                  </Button>
                                   <Button
                                     onClick={() =>
                                       handlePrintBilanElectron(selectedBilan)
@@ -813,21 +1100,9 @@ export default function OrdBilanPage({
                             </span>
                           </td>
                           <td className="px-6 py-4">
-                            <div className="flex items-center gap-2">
-                              <span className="font-semibold text-gray-800">
-                                {justif.titre || "Justification médicale"}
-                              </span>
-                              {justif.duree && (
-                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-800">
-                                  <Clock size={12} /> {justif.duree}
-                                </span>
-                              )}
-                            </div>
-                            {justif.texte && (
-                              <p className="text-xs text-gray-500 line-clamp-1 mt-0.5">
-                                {justif.texte}
-                              </p>
-                            )}
+                            <p className="text-sm font-medium text-gray-800 line-clamp-2">
+                              {justif.texte || "Justification médicale"}
+                            </p>
                           </td>
                           <td className="px-6 py-4">
                             <div className="flex items-center gap-2 text-sm text-gray-700 font-medium">
@@ -841,17 +1116,32 @@ export default function OrdBilanPage({
                             </div>
                           </td>
                           <td className="px-6 py-4">
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              className="h-8 w-8 hover:bg-red-50"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                confirmDelete("justif", justif);
-                              }}
-                            >
-                              <Trash2 size={18} className="text-red-500" />
-                            </Button>
+                            <div className="flex items-center gap-1">
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="h-8 w-8 hover:bg-purple-100 text-purple-600 hover:text-purple-800 transition-colors"
+                                title="Modifier la justification"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleOpenEdit("justif", justif);
+                                }}
+                              >
+                                <Edit3 size={17} />
+                              </Button>
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="h-8 w-8 hover:bg-red-50 text-red-500 hover:text-red-700 transition-colors"
+                                title="Supprimer la justification"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  confirmDelete("justif", justif);
+                                }}
+                              >
+                                <Trash2 size={17} />
+                              </Button>
+                            </div>
                           </td>
                         </tr>
 
@@ -865,96 +1155,6 @@ export default function OrdBilanPage({
                             </DialogHeader>
 
                             <div className="mt-4 space-y-4">
-                              {/* Titre & Durée */}
-                              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                                <div className="sm:col-span-2">
-                                  <label className="block text-xs font-semibold text-gray-700 mb-1">
-                                    Objet / Titre
-                                  </label>
-                                  <input
-                                    type="text"
-                                    value={selectedJustification.titre || ""}
-                                    onChange={(e) =>
-                                      handleChangeJustification(
-                                        selectedJustification.id,
-                                        "titre",
-                                        e.target.value,
-                                      )
-                                    }
-                                    placeholder="Ex: Arrêt de travail / Dispense de sport"
-                                    className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-purple-500 outline-none"
-                                  />
-                                </div>
-                                <div>
-                                  <label className="block text-xs font-semibold text-gray-700 mb-1">
-                                    Durée
-                                  </label>
-                                  <input
-                                    type="text"
-                                    value={selectedJustification.duree || ""}
-                                    onChange={(e) =>
-                                      handleChangeJustification(
-                                        selectedJustification.id,
-                                        "duree",
-                                        e.target.value,
-                                      )
-                                    }
-                                    placeholder="Ex: 7 jours"
-                                    className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-purple-500 outline-none"
-                                  />
-                                </div>
-                              </div>
-
-                              {/* Dates */}
-                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                <div>
-                                  <label className="block text-xs font-semibold text-gray-700 mb-1">
-                                    Date de début (optionnel)
-                                  </label>
-                                  <input
-                                    type="date"
-                                    value={
-                                      selectedJustification.dateDebut
-                                        ? new Date(selectedJustification.dateDebut)
-                                            .toISOString()
-                                            .slice(0, 10)
-                                        : ""
-                                    }
-                                    onChange={(e) =>
-                                      handleChangeJustification(
-                                        selectedJustification.id,
-                                        "dateDebut",
-                                        e.target.value || null,
-                                      )
-                                    }
-                                    className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-purple-500 outline-none"
-                                  />
-                                </div>
-                                <div>
-                                  <label className="block text-xs font-semibold text-gray-700 mb-1">
-                                    Date de fin (optionnel)
-                                  </label>
-                                  <input
-                                    type="date"
-                                    value={
-                                      selectedJustification.dateFin
-                                        ? new Date(selectedJustification.dateFin)
-                                            .toISOString()
-                                            .slice(0, 10)
-                                        : ""
-                                    }
-                                    onChange={(e) =>
-                                      handleChangeJustification(
-                                        selectedJustification.id,
-                                        "dateFin",
-                                        e.target.value || null,
-                                      )
-                                    }
-                                    className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-purple-500 outline-none"
-                                  />
-                                </div>
-                              </div>
-
                               {/* Texte médical */}
                               <div>
                                 <label className="block text-xs font-semibold text-gray-700 mb-1">
@@ -977,6 +1177,17 @@ export default function OrdBilanPage({
                             </div>
 
                             <div className="flex justify-end gap-2 mt-6 pt-4 border-t">
+                              <Button
+                                variant="outline"
+                                onClick={() => {
+                                  setSelectedJustification(null);
+                                  handleOpenEdit("justif", selectedJustification);
+                                }}
+                                className="border-purple-300 text-purple-700 hover:bg-purple-50"
+                              >
+                                <Edit3 size={16} className="mr-1.5" />
+                                Modifier
+                              </Button>
                               <Button
                                 onClick={() =>
                                   handlePrintJustificationElectron(
@@ -1038,6 +1249,49 @@ export default function OrdBilanPage({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* ✏️ Edit Document Modal */}
+      {editModal.open && (
+        <NewOrdanance
+          open={editModal.open}
+          onOpenChange={(open) => {
+            if (!open) {
+              setEditModal({
+                open: false,
+                type: null,
+                id: null,
+                item: null,
+                initialData: null,
+              });
+            }
+          }}
+          selectedPatient={
+            selectedPatient ||
+            (editModal.item?.patient ? editModal.item.patient : null) || {
+              id: patientId,
+            }
+          }
+          initialData={editModal.initialData}
+          initialTab={
+            editModal.type === "ord"
+              ? "ordonnance"
+              : editModal.type === "bilan"
+              ? "labs"
+              : "justif"
+          }
+          editMode={true}
+          editDocType={
+            editModal.type === "ord"
+              ? "ordonnance"
+              : editModal.type === "bilan"
+              ? "bilan"
+              : "justif"
+          }
+          editDocId={editModal.id}
+          onSaveEdit={handleSaveEdit}
+          isSavingEdit={savingEdit}
+        />
+      )}
     </div>
   );
 }

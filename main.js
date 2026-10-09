@@ -1025,9 +1025,7 @@ ipcMain.on("printJustification", (event, data) => {
     age,
     consultationId,
     justificationId,
-    titre = "JUSTIFICATION MÉDICALE",
     texte = "",
-    duree = "",
     cabinet = {},
   } = data;
 
@@ -1246,11 +1244,10 @@ ipcMain.on("printJustification", (event, data) => {
       )}</span>
     </div>
 
-    <div class="ord-title">${titre || "JUSTIFICATION MÉDICALE"}</div>
+    <div class="ord-title">JUSTIFICATION MÉDICALE</div>
 
     <div class="ord-body">
       ${formattedText || "<p>Je soussigné(e), Docteur en médecine, certifie avoir examiné ce jour l'enfant mentionné ci-dessus et que son état de santé justifie ce certificat médical.</p>"}
-      ${duree ? `<div class="ord-meta">Durée prescrite : ${duree}</div>` : ""}
     </div>
 
     <div class="ord-footer">Signature et cachet du médecin</div>

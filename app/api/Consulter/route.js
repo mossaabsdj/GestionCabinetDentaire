@@ -94,36 +94,17 @@ export async function POST(req) {
           justificationRecord:
             data.justificationRecord ||
             (typeof data.justification === "object" &&
-              data.justification !== null)
+              data.justification !== null) ||
+            (typeof data.justification === "string" && data.justification.trim())
               ? {
                   create: {
                     patientId: Number(data.patientId),
                     createdAt: data.createdAt
                       ? new Date(data.createdAt)
                       : undefined,
-                    titre:
-                      (data.justificationRecord || data.justification).titre ||
-                      null,
                     texte:
-                      (data.justificationRecord || data.justification).texte ||
-                      "",
-                    duree:
-                      (data.justificationRecord || data.justification).duree ||
-                      null,
-                    dateDebut: (data.justificationRecord || data.justification)
-                      .dateDebut
-                      ? new Date(
-                          (data.justificationRecord || data.justification)
-                            .dateDebut,
-                        )
-                      : undefined,
-                    dateFin: (data.justificationRecord || data.justification)
-                      .dateFin
-                      ? new Date(
-                          (data.justificationRecord || data.justification)
-                            .dateFin,
-                        )
-                      : undefined,
+                      (data.justificationRecord || data.justification)?.texte ||
+                      (typeof data.justification === "string" ? data.justification : ""),
                   },
                 }
               : undefined,
@@ -254,8 +235,20 @@ export async function POST(req) {
       return await tx.consultation.findUnique({
         where: { id: createdConsult.id },
         include: {
-          ordonnance: { include: { items: true } },
-          bilanRecip: { include: { items: true } },
+          ordonnance: {
+            include: {
+              items: {
+                include: { medicament: true },
+              },
+            },
+          },
+          bilanRecip: {
+            include: {
+              items: {
+                include: { bilan: true },
+              },
+            },
+          },
           justificationRecord: true,
           radios: true,
           rendezVous: true,
@@ -366,26 +359,10 @@ export async function PUT(req) {
           create: {
             consultationId: Number(id),
             patientId: Number(resolvedPatientId),
-            titre: justifPayload.titre || null,
             texte: justifPayload.texte,
-            duree: justifPayload.duree || null,
-            dateDebut: justifPayload.dateDebut
-              ? new Date(justifPayload.dateDebut)
-              : null,
-            dateFin: justifPayload.dateFin
-              ? new Date(justifPayload.dateFin)
-              : null,
           },
           update: {
-            titre: justifPayload.titre || null,
             texte: justifPayload.texte,
-            duree: justifPayload.duree || null,
-            dateDebut: justifPayload.dateDebut
-              ? new Date(justifPayload.dateDebut)
-              : null,
-            dateFin: justifPayload.dateFin
-              ? new Date(justifPayload.dateFin)
-              : null,
           },
         });
       } else if (justifPayload === null) {
