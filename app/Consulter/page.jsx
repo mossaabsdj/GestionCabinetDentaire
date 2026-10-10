@@ -187,6 +187,8 @@ export default function PatientDashboard() {
       note: "",
       ordonnance: data.ordonnance,
       bilanRecip: data.bilanRecip,
+      justification: data.justification,
+      justificationRecord: data.justificationRecord,
     });
   };
 
@@ -234,10 +236,15 @@ export default function PatientDashboard() {
       return;
     }
 
+    const hasJustifDoc = Boolean(
+      (typeof formData?.justification === "string" && formData.justification.trim()) ||
+      (typeof formData?.justification === "object" && formData?.justification?.texte?.trim()) ||
+      (formData?.justificationRecord && formData.justificationRecord?.texte?.trim())
+    );
     const hasPrintableDocs = Boolean(
-      formData?.ordonnance?.items?.length > 0 ||
-      formData?.bilanRecip?.items?.length > 0 ||
-      formData?.justification,
+      (formData?.ordonnance?.items && formData.ordonnance.items.length > 0) ||
+      (formData?.bilanRecip?.items && formData.bilanRecip.items.length > 0) ||
+      hasJustifDoc,
     );
 
     if (!hasPrintableDocs) {
@@ -573,6 +580,7 @@ export default function PatientDashboard() {
         setDataTimeModel(false);
         setNewConsultationData(null);
         setPostSaveData(null);
+        setselectedtab("Informations Patient");
       }
     } catch (err) {
       console.error("❌ Erreur validation consultation:", err);
@@ -587,6 +595,7 @@ export default function PatientDashboard() {
     setPostSaveData(null);
     setNewConsultationData(null);
     setSavingConsultation(false);
+    setselectedtab("Informations Patient");
   };
 
   const handleSaveConsultation = () => {};
@@ -1669,7 +1678,7 @@ export default function PatientDashboard() {
                             <p
                               className={`mt-1.5 truncate text-2xl font-semibold tracking-tight ${
                                 (financialSummary?.detteRestante || 0) > 0
-                                  ? "text-amber-700"
+                                  ? "text-red-700"
                                   : "text-slate-900"
                               }`}
                             >
@@ -1689,7 +1698,7 @@ export default function PatientDashboard() {
                           <span
                             className={`h-1.5 w-1.5 rounded-full ${
                               (financialSummary?.detteRestante || 0) > 0
-                                ? "bg-amber-500"
+                                ? "bg-red-500"
                                 : "bg-emerald-500"
                             }`}
                           />

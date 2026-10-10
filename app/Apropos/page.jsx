@@ -2,6 +2,8 @@
 
 import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
+
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Sparkles,
@@ -37,6 +39,8 @@ import {
   ExternalLink,
   ArrowRight,
   Play,
+  DollarSign,
+  ImageIcon,
 } from "lucide-react";
 import {
   Card,
@@ -60,86 +64,110 @@ import {
 } from "@/components/ui/dialog";
 import param from "@/param.json";
 
-// === Carousel Slides Data ===
+// === Carousel Slides Data (Fonctionnalités Réelles du Cabinet Dentaire) ===
 const CAROUSEL_SLIDES = [
   {
     id: 1,
-    title: "Tableau de Bord Médical Intelligent",
-    subtitle: "Statistiques en temps réel & Activité journalière",
-    desc: "Suivi instantané des flux de patients, ordonnances, bilans et moyennes de consultations horaires avec graphiques dynamiques.",
-    badge: "Analytics & Vue Globale",
-    icon: Activity,
+    title: "Gestion des Soins & Traitements Dentaires",
+    subtitle: "Plans de traitement par dent & Suivi multi-séances",
+    desc: "Création et suivi des plans de traitement avec numérotation dentaire FDI (endodontie, prothèses, chirurgie, composites, implants). Enregistrement des actes réalisés par séance avec modal détaillée et bouton continuer.",
+    badge: "Odontologie & Actes",
+    icon: Sparkles,
     color: "from-blue-600 to-cyan-500",
   },
   {
     id: 2,
-    title: "Gestion Complète des Consultations",
-    subtitle: "Dossier patient & Suivi clinique",
-    desc: "Enregistrement rapide des motifs de consultation, observations cliniques et historique médical.",
-    badge: "Consultation Pro",
-    icon: Stethoscope,
+    title: "Suivi Financier & Versements Échelonnés",
+    subtitle: "Acomptes, Règlements par tranche & Contrôle des dettes",
+    desc: "Suivi rigoureux de la trésorerie patient : calcul instantané du total dû, total payé et du crédit restant. Gestion des versements liés à un soin ou libres avec contrôle anti-dépassement.",
+    badge: "Finances & Crédits",
+    icon: DollarSign,
     color: "from-emerald-600 to-teal-500",
   },
   {
     id: 3,
-    title: "Prescription & Ordonnances Numériques",
-    subtitle: "Génération automatique & Impression A4 standardisée",
-    desc: "Création rapide d'ordonnances avec posologie, durée, fréquences et recettes pré-enregistrées, imprimables en 1 clic.",
-    badge: "Prescription Rapide",
-    icon: Pill,
-    color: "from-purple-600 to-indigo-500",
+    title: "Consultations & Dossier Patient Intégré",
+    subtitle: "Examen clinique, Motif & Synthèse en temps réel",
+    desc: "Centralisation des antécédents, observations cliniques et synthèse directe (dernier traitement, dernier versement, traitement en cours et solde dû). Impression immédiate post-sauvegarde.",
+    badge: "Consultation Pro",
+    icon: Stethoscope,
+    color: "from-indigo-600 to-violet-500",
   },
   {
     id: 4,
-    title: "Laboratoire, Bilans & Radiographies",
-    subtitle: "Visionneuse et archivage sécurisé des examens",
-    desc: "Centralisation des résultats biologiques, demandes d'examens médicaux et radiologies numériques téléchargeables.",
-    badge: "Imagerie & Examens",
+    title: "Prescriptions & Ordonnances Numériques",
+    subtitle: "Recettes types prédéfinies & Impression instantanée",
+    desc: "Génération rapide d'ordonnances avec posologies, fréquences et durées adaptées. Bibliothèque de recettes types (avulsion, abcès, implantologie) et impression avec en-tête officiel du cabinet.",
+    badge: "Prescription Rapide",
+    icon: Pill,
+    color: "from-purple-600 to-pink-500",
+  },
+  {
+    id: 5,
+    title: "Imagerie, Radiographies & Bilans de Laboratoire",
+    subtitle: "Archivage sécurisé des clichés dentaires et analyses",
+    desc: "Stockage et visionneuse des radiographies numériques (panoramiques OPG, rétro-alvéolaires, Cône Beam 3D) et prescription de bilans pré-opératoires avec archivage des comptes-rendus PDF.",
+    badge: "Radiologie & Analyses",
     icon: TestTube,
     color: "from-amber-600 to-orange-500",
   },
   {
-    id: 5,
-    title: "Calendrier Vaccinal & Rappels",
-    subtitle: "Suivi rigoureux du carnet de vaccination",
-    desc: "Enregistrement des doses vaccinales administrées, dates de rappel et historique vaccinal complet par patient.",
-    badge: "Vaccination & Prévention",
-    icon: Syringe,
-    color: "from-rose-600 to-pink-500",
+    id: 6,
+    title: "Justifications Médicales, Agenda & Statistiques",
+    subtitle: "Certificats d'arrêt, Planning des RDV & Tableaux de bord",
+    desc: "Édition de certificats médicaux et dispenses post-opératoires, gestion du calendrier des rendez-vous et tableau de bord analytique de l'activité quotidienne, hebdomadaire et mensuelle.",
+    badge: "Pilotage & Administration",
+    icon: Calendar,
+    color: "from-rose-600 to-red-500",
   },
 ];
 
-// === Features Data ===
+// === Real Features Data Grid ===
 const FEATURES = [
   {
+    icon: Sparkles,
+    title: "Plans de Traitement & Actes par Dent",
+    desc: "Définition des soins par dent (FDI), suivi par séance clinique avec actes réalisés, statut dynamique (En cours, Terminé, Annulé) et modal de consultation détaillée.",
+  },
+  {
+    icon: DollarSign,
+    title: "Gestion Financière & Crédits Patients",
+    desc: "Suivi des versements échelonnés (acomptes et soldes), calcul automatique du total dû, total payé et dette restante avec historique complet filtrable.",
+  },
+  {
     icon: Stethoscope,
-    title: "Dossier Médical Patient",
-    desc: "Suivi des consultations, constantes cliniques et antécédents médicaux complets.",
+    title: "Dossier Patient & Synthèse Clinique",
+    desc: "Fiche médicale exhaustive avec antécédents, synthèse instantanée du traitement en cours, dernier versement et crédit en attente pour une prise en charge rapide.",
   },
   {
     icon: Pill,
     title: "Ordonnances & Recettes Types",
-    desc: "Modèles d'ordonnances prédéfinis pour accélérer les consultations de routine.",
+    desc: "Bibliothèque thérapeutique dentaire, protocoles d'ordonnances types pré-enregistrés, édition de lignes et impression A4/A5 instantanée post-consultation.",
+  },
+  {
+    icon: ImageIcon,
+    title: "Radiologie & Clichés Numériques",
+    desc: "Archivage et visualisation des radiographies (panoramiques OPG, rétro-alvéolaires, CBCT 3D) rattachées directement aux consultations et au patient.",
+  },
+  {
+    icon: TestTube,
+    title: "Bilans de Laboratoire & Analyses",
+    desc: "Prescription d'examens complémentaires (hémostase, glycémie, NFS), modèles de bilans pré-chirurgicaux et attachement de fichiers PDF de laboratoire.",
+  },
+  {
+    icon: FileText,
+    title: "Justifications & Certificats Médicaux",
+    desc: "Modèles types d'arrêts de travail et dispenses post-avulsion ou soins chirurgicaux avec impression personnalisée aux normes du cabinet.",
+  },
+  {
+    icon: Calendar,
+    title: "Agenda & Prise de Rendez-Vous",
+    desc: "Organisation des visites, rendez-vous du jour, séances de soins planifiées et rappels de contrôle post-opératoire rattachés au patient.",
   },
   {
     icon: Activity,
-    title: "Analytique & Stats Avancées",
-    desc: "Graphiques mensuels, hebdomadaires et répartition horaire de l'activité du cabinet.",
-  },
-  {
-    icon: Syringe,
-    title: "Suivi Vaccinal Automatisé",
-    desc: "Gestion des protocoles vaccinaux avec traçabilité des doses et rappels.",
-  },
-  {
-    icon: Database,
-    title: "Base Cloud Neon PostgreSQL",
-    desc: "Synchronisation fluide, sauvegardes instantanées et haute disponibilité.",
-  },
-  {
-    icon: ShieldCheck,
-    title: "Impression Hybride Web & Desktop",
-    desc: "Compatibilité d'impression universelle pour ordonnances, bilans et justificatifs.",
+    title: "Tableau de Bord & Analytique",
+    desc: "Statistiques en temps réel : nombre de consultations, actes les plus pratiqués, flux horaire des visites et suivi de l'activité du cabinet dentaire.",
   },
 ];
 
@@ -147,35 +175,35 @@ const FEATURES = [
 const INITIAL_REVIEWS = [
   {
     id: 1,
-    name: "Professeur",
-    role: "Chirurgien Dentiste",
-    avatar: "CD",
+    name: "Dr. Amine M.",
+    role: "Chirurgien Dentiste Titulaire",
+    avatar: "AM",
     rating: 5,
     date: "28 Août 2026",
     comment:
-      "Une solution logicielle sur-mesure d'une efficacité remarquable. Le gain de temps lors des consultations est énorme, notamment pour l'édition des ordonnances et la gestion des dossiers patients.",
+      "Une solution logicielle sur-mesure d'une efficacité remarquable. Le gain de temps sur le suivi des soins par dent et la gestion des versements échelonnés est énorme au quotidien.",
     verified: true,
   },
   {
     id: 2,
     name: "Secrétariat Médical Cabinet",
-    role: "Gestion Accueil & Dossiers",
+    role: "Gestion Accueil & Règlements",
     avatar: "SM",
     rating: 5,
     date: "25 Août 2026",
     comment:
-      "L'interface est très agréable et réactive. La recherche des patients et l'archivage des bilans se font en quelques secondes. Les thèmes de couleurs personnalisables sont superbes !",
+      "L'interface est très agréable et réactive. La recherche des patients, l'enregistrement des versements et l'impression directe des ordonnances et justificatifs se font en quelques secondes !",
     verified: true,
   },
   {
     id: 3,
     name: "Dr. Karim B.",
-    role: "Médecin Généraliste Collaborateur",
+    role: "Chirurgien Dentiste Collaborateur",
     avatar: "KB",
     rating: 5,
     date: "15 Août 2026",
     comment:
-      "Excellente conception logicielle ! La compatibilité navigateur web et l'accès direct via Neon PostgreSQL offrent une flexibilité parfaite pour travailler depuis n'importe quel poste.",
+      "Excellente gestion des plans de traitement multi-séances, de l'imagerie dentaire et de l'historique par dent. La double utilisation en version Web locale et application de bureau Electron est un vrai atout.",
     verified: true,
   },
 ];
@@ -287,8 +315,13 @@ export default function AproposPage() {
       {/* ======================================================== */}
       <header className="max-w-7xl mx-auto mb-8 p-4 rounded-2xl bg-white/80 backdrop-blur-md border border-[var(--color-200)] shadow-md flex items-center justify-between sticky top-4 z-40">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[var(--color-500)] to-[var(--color-700)] flex items-center justify-center text-white shadow-md">
-            <Stethoscope className="w-6 h-6" />
+          <div className="w-16 h-16 rounded-xl bg-gradient-to-br from-[var(--color-500)] to-[var(--color-700)] flex items-center justify-center text-white shadow-md">
+            <Image
+              src="/amel.png"
+              alt="Cabinet Logo"
+              width={45}
+              height={45}
+            />{" "}
           </div>
           <div>
             <h2 className="text-base sm:text-lg font-bold text-gray-900 leading-tight">
@@ -337,10 +370,10 @@ export default function AproposPage() {
 
           <p className="text-base sm:text-lg text-gray-600 max-w-3xl mx-auto leading-relaxed">
             Application médicale complète conçue pour digitaliser l'ensemble des
-            processus cliniques du cabinet dentaire : consultations,
-            ordonnances normalisées, examens
-            complémentaires, bilans de laboratoire, suivi vaccinal et
-            statistiques prédictives.
+            processus cliniques du cabinet dentaire : dossiers patients, plans de
+            traitement et actes par dent, gestion financière et versements
+            échelonnés, ordonnances normalisées, radiographies et statistiques en
+            temps réel.
           </p>
 
           {/* PRIMARY CTA BUTTON: TESTER L'APPLICATION */}
@@ -358,15 +391,15 @@ export default function AproposPage() {
           <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
             <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-white border border-gray-200 rounded-lg text-xs font-semibold text-gray-700 shadow-sm">
               <Globe className="w-3.5 h-3.5 text-blue-600" />
-              Mode Web & Cloud Ready
+              Mode Web & Desktop Electron
             </span>
             <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-white border border-gray-200 rounded-lg text-xs font-semibold text-gray-700 shadow-sm">
               <Database className="w-3.5 h-3.5 text-emerald-600" />
-              Neon PostgreSQL Database
+              PostgreSQL Haute Performance
             </span>
             <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-white border border-gray-200 rounded-lg text-xs font-semibold text-gray-700 shadow-sm">
               <ShieldCheck className="w-3.5 h-3.5 text-purple-600" />
-              Sécurité & Impression A4
+              Impression A4 / A5 & Sauvegardes
             </span>
           </div>
         </motion.section>
@@ -541,7 +574,7 @@ export default function AproposPage() {
                                 Base de données
                               </span>
                               <span className="font-bold text-emerald-600">
-                                Neon Postgres
+                                PostgreSQL
                               </span>
                             </div>
                           </div>
@@ -686,7 +719,7 @@ export default function AproposPage() {
                     "React",
                     "Tailwind CSS",
                     "PostgreSQL",
-                    "Neon DB",
+                    "Node.js",
                     "Prisma",
                     "Framer Motion",
                     "Electron",

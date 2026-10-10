@@ -11,7 +11,16 @@ import {
   DialogFooter,
   DialogDescription,
 } from "@/components/ui/dialog";
-import { Calendar, Trash2, FileText, Clock, Edit3, Loader2 } from "lucide-react";
+import {
+  Calendar,
+  Trash2,
+  FileText,
+  Clock,
+  Edit3,
+  Loader2,
+} from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+
 import { printOrdonnance, printBilan, printJustification } from "@/lib/printer";
 import Swal from "sweetalert2";
 import NewOrdanance from "@/app/component/NewOrdanance/page";
@@ -171,8 +180,8 @@ export default function OrdBilanPage({
         deleteType === "ord"
           ? `/api/Ordonnance?id=${itemToDelete.id}`
           : deleteType === "bilan"
-          ? `/api/BilanRecip?id=${itemToDelete.id}`
-          : `/api/Justifications?id=${itemToDelete.id}`;
+            ? `/api/BilanRecip?id=${itemToDelete.id}`
+            : `/api/Justifications?id=${itemToDelete.id}`;
 
       const res = await fetch(endpoint, { method: "DELETE" });
       if (!res.ok) throw new Error("Failed to delete");
@@ -278,12 +287,18 @@ export default function OrdBilanPage({
         if (!res.ok) {
           const errData = await res.json().catch(() => ({}));
           throw new Error(
-            errData.error || "Erreur lors de la mise à jour de l'ordonnance"
+            errData.error || "Erreur lors de la mise à jour de l'ordonnance",
           );
         }
 
         await fetchOrdonnances();
-        setEditModal({ open: false, type: null, id: null, item: null, initialData: null });
+        setEditModal({
+          open: false,
+          type: null,
+          id: null,
+          item: null,
+          initialData: null,
+        });
         Swal.fire({
           icon: "success",
           title: "Succès",
@@ -317,12 +332,18 @@ export default function OrdBilanPage({
         if (!res.ok) {
           const errData = await res.json().catch(() => ({}));
           throw new Error(
-            errData.error || "Erreur lors de la mise à jour du bilan"
+            errData.error || "Erreur lors de la mise à jour du bilan",
           );
         }
 
         await fetchBilans();
-        setEditModal({ open: false, type: null, id: null, item: null, initialData: null });
+        setEditModal({
+          open: false,
+          type: null,
+          id: null,
+          item: null,
+          initialData: null,
+        });
         Swal.fire({
           icon: "success",
           title: "Succès",
@@ -352,12 +373,19 @@ export default function OrdBilanPage({
         if (!res.ok) {
           const errData = await res.json().catch(() => ({}));
           throw new Error(
-            errData.error || "Erreur lors de la mise à jour de la justification"
+            errData.error ||
+              "Erreur lors de la mise à jour de la justification",
           );
         }
 
         await fetchJustifications();
-        setEditModal({ open: false, type: null, id: null, item: null, initialData: null });
+        setEditModal({
+          open: false,
+          type: null,
+          id: null,
+          item: null,
+          initialData: null,
+        });
         Swal.fire({
           icon: "success",
           title: "Succès",
@@ -371,7 +399,8 @@ export default function OrdBilanPage({
       Swal.fire({
         icon: "error",
         title: "Erreur",
-        text: err.message || "Une erreur est survenue lors de l'enregistrement.",
+        text:
+          err.message || "Une erreur est survenue lors de l'enregistrement.",
       });
     } finally {
       setSavingEdit(false);
@@ -619,7 +648,8 @@ export default function OrdBilanPage({
         }),
       });
 
-      if (!res.ok) throw new Error("Erreur lors de la sauvegarde de la justification");
+      if (!res.ok)
+        throw new Error("Erreur lors de la sauvegarde de la justification");
       fetchJustifications();
       Swal.fire({
         icon: "success",
@@ -629,7 +659,10 @@ export default function OrdBilanPage({
         showConfirmButton: false,
       });
     } catch (err) {
-      console.error("❌ Erreur lors de la sauvegarde de la justification:", err);
+      console.error(
+        "❌ Erreur lors de la sauvegarde de la justification:",
+        err,
+      );
       Swal.fire({
         icon: "error",
         title: "Erreur",
@@ -1092,7 +1125,9 @@ export default function OrdBilanPage({
                           className={`cursor-pointer transition-colors hover:bg-purple-50/50 ${
                             index % 2 === 0 ? "bg-white" : "bg-gray-50"
                           }`}
-                          onClick={() => setSelectedJustification({ ...justif })}
+                          onClick={() =>
+                            setSelectedJustification({ ...justif })
+                          }
                         >
                           <td className="px-6 py-4">
                             <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-semibold bg-purple-100 text-purple-800">
@@ -1106,10 +1141,7 @@ export default function OrdBilanPage({
                           </td>
                           <td className="px-6 py-4">
                             <div className="flex items-center gap-2 text-sm text-gray-700 font-medium">
-                              <Calendar
-                                size={16}
-                                className="text-purple-600"
-                              />
+                              <Calendar size={16} className="text-purple-600" />
                               {new Date(justif.createdAt).toLocaleDateString(
                                 "fr-FR",
                               )}
@@ -1150,7 +1182,8 @@ export default function OrdBilanPage({
                             <DialogHeader>
                               <DialogTitle className="text-purple-700 text-lg font-semibold flex items-center gap-2">
                                 <FileText size={20} />
-                                Détails de la Justification Médicale #{selectedJustification.id}
+                                Détails de la Justification Médicale #
+                                {selectedJustification.id}
                               </DialogTitle>
                             </DialogHeader>
 
@@ -1181,7 +1214,10 @@ export default function OrdBilanPage({
                                 variant="outline"
                                 onClick={() => {
                                   setSelectedJustification(null);
-                                  handleOpenEdit("justif", selectedJustification);
+                                  handleOpenEdit(
+                                    "justif",
+                                    selectedJustification,
+                                  );
                                 }}
                                 className="border-purple-300 text-purple-700 hover:bg-purple-50"
                               >
@@ -1276,16 +1312,16 @@ export default function OrdBilanPage({
             editModal.type === "ord"
               ? "ordonnance"
               : editModal.type === "bilan"
-              ? "labs"
-              : "justif"
+                ? "labs"
+                : "justif"
           }
           editMode={true}
           editDocType={
             editModal.type === "ord"
               ? "ordonnance"
               : editModal.type === "bilan"
-              ? "bilan"
-              : "justif"
+                ? "bilan"
+                : "justif"
           }
           editDocId={editModal.id}
           onSaveEdit={handleSaveEdit}

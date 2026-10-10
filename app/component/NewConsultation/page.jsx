@@ -55,7 +55,19 @@ export default function NewConsultationPage({
   });
 
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState("");
+  const [errorModal, setErrorModal] = useState({
+    open: false,
+    title: "Champs requis",
+    message: "",
+  });
+
+  const showErrorModal = (message, title = "Champs requis") => {
+    setErrorModal({
+      open: true,
+      title,
+      message,
+    });
+  };
 
   // Modal states
   const [selectorModalOpen, setSelectorModalOpen] = useState(false);
@@ -179,39 +191,54 @@ export default function NewConsultationPage({
 
   // Sync preselected treatment if continued from Treatments tab
   useEffect(() => {
-    if (preselectedTraitement && selectedPatient?.id) {
-      const existingIdx = form.traitements.findIndex(
-        (t) => t.traitementId === preselectedTraitement.id,
+    if (!preselectedTraitement || !selectedPatient?.id) return;
+
+    setForm((prev) => {
+      // التحقق من وجود العلاج مسبقًا باستخدام ID
+      const existingIdx = prev.traitements.findIndex(
+        (t) => Number(t.traitementId) === Number(preselectedTraitement.id),
       );
+
+      // إذا كان العلاج موجودًا، ننتقل إلى تبويبه دون إضافته مجددًا
       if (existingIdx !== -1) {
         setActiveTreatmentIndex(existingIdx);
-      } else {
-        const newEntry = {
-          traitementId: preselectedTraitement.id,
-          nouveauTraitement: null,
-          description: preselectedTraitement.description || "",
-          dent: preselectedTraitement.dent || "",
-          prixTotal: preselectedTraitement.prixTotal || 0,
-          totalPaye: preselectedTraitement.totalPaye || 0,
-          resteAPayer: preselectedTraitement.resteAPayer || 0,
-          acteRealise: "",
-          hasVersement: false,
-          versementMontant: "",
-          versementNote: "",
-          hasRendezVous: false,
-          rendezVousDate: "",
-          rendezVousDescription: "",
-        };
-        setForm((prev) => {
-          const next = [...prev.traitements, newEntry];
-          setActiveTreatmentIndex(next.length - 1);
-          return { ...prev, traitements: next };
-        });
+        return prev;
       }
-      onClearPreselectedTraitement?.();
-    }
-  }, [preselectedTraitement, selectedPatient?.id]);
 
+      // إذا لم يكن موجودًا، نضيفه
+      const newEntry = {
+        traitementId: preselectedTraitement.id,
+        nouveauTraitement: null,
+        description: preselectedTraitement.description || "",
+        dent: preselectedTraitement.dent || "",
+        prixTotal: preselectedTraitement.prixTotal || 0,
+        totalPaye: preselectedTraitement.totalPaye || 0,
+        resteAPayer: preselectedTraitement.resteAPayer || 0,
+        acteRealise: "",
+        hasVersement: false,
+        versementMontant: "",
+        versementNote: "",
+        hasRendezVous: false,
+        rendezVousDate: "",
+        rendezVousDescription: "",
+      };
+
+      const next = [...prev.traitements, newEntry];
+
+      setActiveTreatmentIndex(next.length - 1);
+
+      return {
+        ...prev,
+        traitements: next,
+      };
+    });
+
+    onClearPreselectedTraitement?.();
+  }, [
+    preselectedTraitement,
+    selectedPatient?.id,
+    onClearPreselectedTraitement,
+  ]);
   useEffect(() => {
     if (viderForm) {
       setForm({
@@ -231,10 +258,30 @@ export default function NewConsultationPage({
   }, [viderForm, setViderForm]);
 
   async function handleSave() {
-    setError("");
+    setErrorModal({ open: false, title: "Champs requis", message: "" });
     setSaving(true);
     try {
-      // Validate treatments session acts and payments
+      // 1. Validation : vérifier qu'au moins un élément a été renseigné
+      const hasAnyData =
+        form.note?.trim() ||
+        form.motifDeConsultation?.trim() ||
+        form.rendezVousDate ||
+        form.traitements.length > 0 ||
+        (form.ordonnance?.items && form.ordonnance.items.length > 0) ||
+        (form.bilanRecip?.items && form.bilanRecip.items.length > 0) ||
+        (form.justification &&
+          (typeof form.justification === "string"
+            ? form.justification.trim()
+            : form.justification?.texte?.trim())) ||
+        (form.radios && form.radios.length > 0);
+
+      if (!hasAnyData) {
+        throw new Error(
+          "Veuillez renseigner au moins un élément (soin, note clinique, motif, ordonnance, bilan, etc.) avant d'enregistrer la consultation.",
+        );
+      }
+
+      // 2. Validate treatments session acts and payments
       for (let i = 0; i < form.traitements.length; i++) {
         const tr = form.traitements[i];
         if (!tr.acteRealise || !tr.acteRealise.trim()) {
@@ -294,7 +341,7 @@ export default function NewConsultationPage({
         }),
       );
     } catch (e) {
-      setError(e?.message ?? "Erreur lors de l'enregistrement");
+      showErrorModal(e?.message ?? "Erreur lors de l'enregistrement");
     } finally {
       setSaving(false);
     }
@@ -376,7 +423,7 @@ export default function NewConsultationPage({
   // Treatment management helpers
   const handleAddExistingTreatment = () => {
     if (!selectedExistingId) {
-      setError("Veuillez sélectionner un traitement dans la liste.");
+      showErrorModal("Veuillez sélectionner un traitement dans la liste.");
       return;
     }
     const selected = patientTraitements.find(
@@ -422,7 +469,7 @@ export default function NewConsultationPage({
 
   const handleAddNewTreatment = () => {
     if (!newTreatmentFields.description.trim()) {
-      setError("Veuillez renseigner la description du soin.");
+      showErrorModal("Veuillez renseigner la description du soin.");
       return;
     }
     const prix = parseFloat(newTreatmentFields.prixTotal) || 0;
@@ -493,7 +540,10 @@ export default function NewConsultationPage({
       }));
     } catch (err) {
       console.error(err);
-      setError("Échec du téléversement du fichier.");
+      showErrorModal(
+        "Échec du téléversement du fichier.",
+        "Erreur de téléversement",
+      );
     } finally {
       setUploadingRadio(false);
     }
@@ -594,12 +644,6 @@ export default function NewConsultationPage({
   return (
     <div className="min-h-screen w-full dark:bg-gray-900 p-0">
       <div className="max-w-full mx-auto dark:bg-gray-800 rounded-2xl p-6 pt-0 md:p-6 md:pt-0">
-        {error && (
-          <div className="flex items-center gap-2 mb-4 text-sm text-red-600 bg-red-50 p-3 rounded-xl border border-red-200">
-            <AlertCircle className="w-4 h-4 flex-shrink-0" /> {error}
-          </div>
-        )}
-
         {/* ======================================================== */}
         {/* 🌟 SECTION DU HAUT : ÉLÉMENTS ATTACHÉS À LA CONSULTATION */}
         {/* ======================================================== */}
@@ -907,7 +951,7 @@ export default function NewConsultationPage({
               {form.traitements[activeTreatmentIndex] &&
                 (() => {
                   const tr = form.traitements[activeTreatmentIndex];
-
+                  console.log(tr);
                   // A block is "active" as soon as one of its fields has a value
                   const versementOn = Boolean(
                     tr.versementMontant || tr.versementNote,
@@ -1079,7 +1123,38 @@ export default function NewConsultationPage({
                           </div>
                         </div>
                       </div>
-
+                      <div className="mt-4 pt-3 border-t border-slate-100">
+                        <div className="flex flex-wrap items-center justify-between text-xs text-slate-600 mb-1.5">
+                          <span>
+                            Prix total :{" "}
+                            <strong className="text-slate-900 font-semibold">
+                              {(tr.prixTotal || 0).toLocaleString("fr-FR")} DZD
+                            </strong>
+                          </span>
+                          <span>
+                            Payé :{" "}
+                            <strong className="text-emerald-700 font-semibold">
+                              {(
+                                tr.prixTotal - tr.resteAPayer || 0
+                              ).toLocaleString("fr-FR")}{" "}
+                              DZD
+                            </strong>
+                          </span>
+                          <span>
+                            Reste :{" "}
+                            <strong
+                              className={`font-bold ${
+                                tr.resteAPayer > 0
+                                  ? "text-amber-700"
+                                  : "text-emerald-700"
+                              }`}
+                            >
+                              {(tr.resteAPayer || 0).toLocaleString("fr-FR")}{" "}
+                              DZD
+                            </strong>
+                          </span>
+                        </div>
+                      </div>
                       {/* Treatment summary: keep your existing block here, unchanged */}
                     </div>
                   );
@@ -1656,6 +1731,48 @@ export default function NewConsultationPage({
               className="bg-red-600 hover:bg-red-700 text-white rounded-xl"
             >
               Supprimer
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ⚠️ Modal d'erreur / Champs requis */}
+      <Dialog
+        open={errorModal.open}
+        onOpenChange={(isOpen) =>
+          setErrorModal((prev) => ({ ...prev, open: isOpen }))
+        }
+      >
+        <DialogContent className="sm:max-w-md bg-white rounded-2xl shadow-2xl border border-red-200 p-6">
+          <DialogHeader className="flex flex-row items-center gap-3">
+            <div className="p-3 rounded-2xl bg-red-100 text-red-600 shrink-0">
+              <AlertCircle className="w-6 h-6" />
+            </div>
+            <div>
+              <DialogTitle className="text-xl font-bold text-slate-900">
+                {errorModal.title || "Champs requis"}
+              </DialogTitle>
+              <DialogDescription className="text-sm text-slate-500 mt-0.5">
+                Veuillez vérifier les informations de la consultation.
+              </DialogDescription>
+            </div>
+          </DialogHeader>
+          <div className="py-3 text-sm text-slate-700 font-medium leading-relaxed">
+            {errorModal.message}
+          </div>
+          <DialogFooter className="mt-2 flex justify-end">
+            <Button
+              type="button"
+              onClick={() =>
+                setErrorModal({
+                  open: false,
+                  title: "Champs requis",
+                  message: "",
+                })
+              }
+              className="w-full sm:w-auto bg-red-600 hover:bg-red-700 text-white rounded-xl text-sm font-semibold px-6 py-2.5 shadow-sm"
+            >
+              Compris
             </Button>
           </DialogFooter>
         </DialogContent>

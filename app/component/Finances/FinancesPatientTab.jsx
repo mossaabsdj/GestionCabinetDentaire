@@ -635,9 +635,6 @@ export default function FinancesPatientTab({
                 onChange={(e) => setSelectedTraitementId(e.target.value)}
                 className="w-full h-11 px-3 rounded-xl border border-[var(--color-200)] dark:border-border bg-white dark:bg-card text-foreground focus:ring-2 focus:ring-[var(--color-400)] focus:border-[var(--color-500)] text-sm outline-none transition-all"
               >
-                <option value="">
-                  -- Versement libre / Aucun soin particulier --
-                </option>
                 {traitements
                   .filter((t) => t.statut !== "ANNULE")
                   .map((t) => (

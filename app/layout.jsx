@@ -4,12 +4,16 @@ import SidebarPage from "@/app/component/NewSideBar/page";
 import ExitButton from "@/app/component/exitbutton/page";
 import param from "@/param.json";
 import { ThemeProvider } from "@/context/theme-context";
+import { icons } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
 export const metadata = {
   title: param.title,
   description: "make world better",
+  icons: {
+    icon: "/logo.ico",
+  },
 };
 
 export default function RootLayout({ children }) {

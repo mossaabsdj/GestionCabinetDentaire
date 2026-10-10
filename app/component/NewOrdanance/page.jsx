@@ -821,7 +821,7 @@ export default function PrescriptionModal({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        className="max-w-4xl min-w-4xl p-0 max-h-[97vh] overflow-hidden"
+        className="max-w-4xl min-w-4xl p-0 max-h-[90vh] overflow-y-auto"
         onOpenAutoFocus={(e) => {
           if (activeTab === "ordonnance") {
             e.preventDefault();
@@ -1022,7 +1022,7 @@ export default function PrescriptionModal({
                           <SelectTrigger className="w-full border-[var(--color-300)] focus:ring-2 focus:ring-[var(--color-400)]">
                             <SelectValue placeholder="Choisir" />
                           </SelectTrigger>
-                          <SelectContent>
+                          <SelectContent className="max-h-60 overflow-y-auto">
                             {ordTypes.map((t) => (
                               <SelectItem key={t.id} value={t.id}>
                                 {t.nom}
@@ -1505,7 +1505,7 @@ export default function PrescriptionModal({
                           <SelectTrigger className="w-full border-[var(--color-300)] focus:ring-2 focus:ring-[var(--color-400)]">
                             <SelectValue placeholder="Choisir le type" />
                           </SelectTrigger>
-                          <SelectContent>
+                          <SelectContent className="max-h-60 overflow-y-auto">
                             {bilanTypes.map((t) => (
                               <SelectItem key={t.id} value={t.id}>
                                 {t.nom}
@@ -1682,7 +1682,7 @@ export default function PrescriptionModal({
                           <SelectTrigger className="w-full border-[var(--color-300)] focus:ring-2 focus:ring-[var(--color-400)]">
                             <SelectValue placeholder="Choisir un modèle..." />
                           </SelectTrigger>
-                          <SelectContent>
+                          <SelectContent className="max-h-60 overflow-y-auto">
                             {justifTypes.map((t) => (
                               <SelectItem key={t.id} value={t.id}>
                                 {t.nom}
