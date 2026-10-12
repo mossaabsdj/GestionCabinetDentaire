@@ -33,6 +33,7 @@ export async function GET() {
       cabinets,
       traitements,
       consultationsTraitement,
+      depenses,
     ] = await Promise.all([
       prisma.patient.findMany(),
       prisma.consultation.findMany(),
@@ -57,6 +58,7 @@ export async function GET() {
       prisma.cabinet.findMany(),
       prisma.traitement.findMany(),
       prisma.consultationTraitement.findMany(),
+      prisma.depense.findMany(),
     ]);
 
     const backupPayload = {
@@ -71,6 +73,7 @@ export async function GET() {
         bilans: bilans.length,
         vaccines: vaccines.length,
         justifications: justifications.length,
+        depenses: depenses.length,
       },
       data: {
         cabinets,
@@ -96,6 +99,7 @@ export async function GET() {
         bilanFiles,
         traitements,
         consultationsTraitement,
+        depenses,
       },
     };
 

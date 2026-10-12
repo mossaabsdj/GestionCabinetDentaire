@@ -1,25 +1,21 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import param from "@/param.json";
-import path from "path";
-import { writeFile, readFile } from "fs/promises";
 
 export const dynamic = "force-dynamic";
 
 const DEFAULT_CABINET_DATA = {
-  title: param.title || "Docteur",
-  doctorName: param.doctorName || "Docteur",
-  doctorNameAr: param.doctorNameAr || "دكتور",
-  specialty:
-    param.specialty || "Chirurgien Dentiste",
-  specialtyAr: param.specialtyAr || "جراحة و طب الأسنان",
-  cabinetName: param.cabinetName || "Cabinet Dentaire",
-  cabinetNameAr: param.cabinetNameAr || "عيادة طب الأسنان",
-  address: param.address || "Rue Frères KAFI logts 38, 1er étage",
-  addressAr: param.addressAr || "شارع الإخوة كافي عقار 38 الطابق الأول",
-  city: param.city || "El-Harrouch SKIKDA",
-  cityAr: param.cityAr || "(بزاز لعلاوي) الحروش - سكيكدة",
-  phones: param.phones || "0652 76 89 72 / 0562 24 40 87",
+  title: "Docteur",
+  doctorName: "Docteur",
+  doctorNameAr: "دكتور",
+  specialty: "Chirurgien Dentiste",
+  specialtyAr: "جراحة و طب الأسنان",
+  cabinetName: "Cabinet Dentaire",
+  cabinetNameAr: "عيادة طب الأسنان",
+  address: "Rue Frères KAFI logts 38, 1er étage",
+  addressAr: "شارع الإخوة كافي عقار 38 الطابق الأول",
+  city: "El-Harrouch SKIKDA",
+  cityAr: "(بزاز لعلاوي) الحروش - سكيكدة",
+  phones: "0652 76 89 72 / 0562 24 40 87",
   logo: "/uploads/image.PNG",
 };
 
@@ -55,25 +51,58 @@ export async function PUT(req) {
     const existing = await prisma.cabinet.findFirst();
 
     const dataToSave = {
-      title: body.title?.trim() || "Professeur",
-      doctorName: body.doctorName?.trim() || "Professeur",
-      doctorNameAr: body.doctorNameAr?.trim() || "بروفيسور",
+      title:
+        body.title !== undefined
+          ? (typeof body.title === "string" ? body.title.trim() : body.title)
+          : (existing?.title ?? DEFAULT_CABINET_DATA.title),
+      doctorName:
+        body.doctorName !== undefined
+          ? (typeof body.doctorName === "string" ? body.doctorName.trim() : body.doctorName)
+          : (existing?.doctorName ?? DEFAULT_CABINET_DATA.doctorName),
+      doctorNameAr:
+        body.doctorNameAr !== undefined
+          ? (typeof body.doctorNameAr === "string" ? body.doctorNameAr.trim() : body.doctorNameAr)
+          : (existing?.doctorNameAr ?? DEFAULT_CABINET_DATA.doctorNameAr),
       specialty:
-        body.specialty?.trim() ||
-        "Médecin Spécialiste en Pédiatrie et Néonatologie",
+        body.specialty !== undefined
+          ? (typeof body.specialty === "string" ? body.specialty.trim() : body.specialty)
+          : (existing?.specialty ?? DEFAULT_CABINET_DATA.specialty),
       specialtyAr:
-        body.specialtyAr?.trim() || "طبيبة مختصة في طب الأطفال و حديثي الولادة",
-      cabinetName: body.cabinetName?.trim() || "Cabinet Pédiatrique",
-      cabinetNameAr: body.cabinetNameAr?.trim() || "عيادة طب الأطفال",
+        body.specialtyAr !== undefined
+          ? (typeof body.specialtyAr === "string" ? body.specialtyAr.trim() : body.specialtyAr)
+          : (existing?.specialtyAr ?? DEFAULT_CABINET_DATA.specialtyAr),
+      cabinetName:
+        body.cabinetName !== undefined
+          ? (typeof body.cabinetName === "string" ? body.cabinetName.trim() : body.cabinetName)
+          : (existing?.cabinetName ?? DEFAULT_CABINET_DATA.cabinetName),
+      cabinetNameAr:
+        body.cabinetNameAr !== undefined
+          ? (typeof body.cabinetNameAr === "string" ? body.cabinetNameAr.trim() : body.cabinetNameAr)
+          : (existing?.cabinetNameAr ?? DEFAULT_CABINET_DATA.cabinetNameAr),
       address:
-        body.address?.trim() || "Rue Frères KAFI logts 38, 1er étage",
+        body.address !== undefined
+          ? (typeof body.address === "string" ? body.address.trim() : body.address)
+          : (existing?.address ?? DEFAULT_CABINET_DATA.address),
       addressAr:
-        body.addressAr?.trim() || "شارع الإخوة كافي عقار 38 الطابق الأول",
-      city: body.city?.trim() || "El-Harrouch SKIKDA",
-      cityAr: body.cityAr?.trim() || "(بزاز لعلاوي) الحروش - سكيكدة",
+        body.addressAr !== undefined
+          ? (typeof body.addressAr === "string" ? body.addressAr.trim() : body.addressAr)
+          : (existing?.addressAr ?? DEFAULT_CABINET_DATA.addressAr),
+      city:
+        body.city !== undefined
+          ? (typeof body.city === "string" ? body.city.trim() : body.city)
+          : (existing?.city ?? DEFAULT_CABINET_DATA.city),
+      cityAr:
+        body.cityAr !== undefined
+          ? (typeof body.cityAr === "string" ? body.cityAr.trim() : body.cityAr)
+          : (existing?.cityAr ?? DEFAULT_CABINET_DATA.cityAr),
       phones:
-        body.phones?.trim() || "0652 76 89 72 / 0562 24 40 87",
-      logo: body.logo?.trim() || "/uploads/image.PNG",
+        body.phones !== undefined
+          ? (typeof body.phones === "string" ? body.phones.trim() : body.phones)
+          : (existing?.phones ?? DEFAULT_CABINET_DATA.phones),
+      logo:
+        body.logo !== undefined
+          ? (typeof body.logo === "string" ? body.logo.trim() : body.logo) || DEFAULT_CABINET_DATA.logo
+          : (existing?.logo ?? DEFAULT_CABINET_DATA.logo),
     };
 
     let updated;
@@ -86,23 +115,6 @@ export async function PUT(req) {
       updated = await prisma.cabinet.create({
         data: dataToSave,
       });
-    }
-
-    // Synchronize to param.json file if possible
-    try {
-      const paramPath = path.join(process.cwd(), "param.json");
-      let currentParam = {};
-      try {
-        currentParam = JSON.parse(await readFile(paramPath, "utf-8"));
-      } catch (e) {}
-
-      const merged = {
-        ...currentParam,
-        ...dataToSave,
-      };
-      await writeFile(paramPath, JSON.stringify(merged, null, 2), "utf-8");
-    } catch (err) {
-      console.warn("Could not sync to param.json:", err);
     }
 
     return NextResponse.json(updated);

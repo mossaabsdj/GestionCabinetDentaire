@@ -1,11 +1,25 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { HeartPulse } from "lucide-react";
 import Image from "next/image";
-import param from "@/param.json";
 
 export default function LoadingScreen() {
+  const [cabinet, setCabinet] = useState({
+    title: "Cabinet Dentaire",
+    doctorName: "Docteur",
+  });
+
+  useEffect(() => {
+    fetch("/api/cabinet")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data) setCabinet(data);
+      })
+      .catch(() => {});
+  }, []);
+
   return (
     <div className="fixed inset-0 z-50 flex flex-col items-center justify-center backdrop-blur-md bg-[var(--color-900)]/50 text-white">
       {/* Flying & Pulsing Icon */}
@@ -20,7 +34,7 @@ export default function LoadingScreen() {
       {/* Logo + Title */}
       <div className="flex items-center gap-3">
         <h1 className="text-3xl font-extrabold tracking-wide">
-          {param.title || param.doctorName || "Professeur"}
+          {cabinet.title || cabinet.doctorName || "Cabinet Dentaire"}
         </h1>
         <HeartPulse
           size={30}

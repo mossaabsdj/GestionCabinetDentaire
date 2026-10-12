@@ -7,14 +7,21 @@ const { backupDatabase } = require("./backup");
 const { restoreDatabase } = require("./restore");
 const { autoUpdater } = require("electron-updater");
 
-let param = {};
-try {
-  param = require("./param.json");
-} catch (e) {
-  try {
-    param = require(path.join(process.execPath, "..", "param.json"));
-  } catch (e2) {}
-}
+let param = {
+  title: "Cabinet Dentaire",
+  doctorName: "Docteur",
+  doctorNameAr: "دكتور",
+  specialty: "Chirurgien Dentiste",
+  specialtyAr: "جراحة و طب الأسنان",
+  cabinetName: "Cabinet Dentaire",
+  cabinetNameAr: "عيادة طب الأسنان",
+  address: "Rue Frères KAFI logts 38, 1er étage",
+  addressAr: "شارع الإخوة كافي عقار 38 الطابق الأول",
+  city: "El-Harrouch SKIKDA",
+  cityAr: "(بزاز لعلاوي) الحروش - سكيكدة",
+  phones: "0652 76 89 72 / 0562 24 40 87",
+  logo: "/uploads/image.PNG",
+};
 let mainWindow;
 let splashWindow;
 let serverProcess;

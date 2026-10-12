@@ -32,7 +32,6 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { printOrdonnance, printBilan, printJustification } from "@/lib/printer";
-import param from "@/param.json";
 import Swal from "sweetalert2";
 
 function isSameDate(itemDate, targetDateStr) {
@@ -91,8 +90,10 @@ export default function PatientVisits({
       if (!res.ok) throw new Error(data.error || "Erreur de chargement");
       setVisits(data);
       setfiltredData(data);
+      return data;
     } catch (err) {
       console.error("❌ Erreur:", err);
+      return [];
     } finally {
       setLoading(false);
     }
@@ -237,7 +238,8 @@ export default function PatientVisits({
       Swal.fire({
         icon: "error",
         title: "Erreur",
-        text: err?.message || "Erreur lors de la suppression de la consultation.",
+        text:
+          err?.message || "Erreur lors de la suppression de la consultation.",
         confirmButtonColor: "#d33",
       });
     } finally {
@@ -272,11 +274,11 @@ export default function PatientVisits({
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || "Erreur de mise à jour");
 
-      await fetchConsultations();
+      const newdata = await fetchConsultations();
       setIsEditing(false);
 
       // Update the selected visit after save
-      const updatedVisit = filtredData[currentVisitIndex];
+      const updatedVisit = newdata[currentVisitIndex];
       await fetchPatientById(patientId);
 
       setSelectedVisit(updatedVisit);
@@ -285,7 +287,8 @@ export default function PatientVisits({
       Swal.fire({
         icon: "error",
         title: "Erreur",
-        text: err?.message || "Erreur lors de la mise à jour de la consultation.",
+        text:
+          err?.message || "Erreur lors de la mise à jour de la consultation.",
         confirmButtonColor: "#d33",
       });
     } finally {
@@ -478,7 +481,10 @@ export default function PatientVisits({
                 ))
               ) : filtredData?.length === 0 ? (
                 <tr>
-                  <td colSpan={3} className="px-6 py-8 text-center text-gray-500">
+                  <td
+                    colSpan={3}
+                    className="px-6 py-8 text-center text-gray-500"
+                  >
                     Aucune consultation trouvée.
                   </td>
                 </tr>
@@ -757,17 +763,26 @@ export default function PatientVisits({
               {selectedVisit?.consultationsTraitement?.length > 0 && (
                 <div className="mt-5">
                   <h3 className="text-[var(--color-700)] font-semibold text-sm sm:text-base flex items-center gap-2 mb-2">
-                    <Activity size={18} /> Soins dentaires & Actes réalisés lors de cette séance
+                    <Activity size={18} /> Soins dentaires & Actes réalisés lors
+                    de cette séance
                   </h3>
                   <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
                     <div className="overflow-x-auto">
                       <table className="w-full text-sm border-collapse min-w-[500px]">
                         <thead>
                           <tr className="border-b bg-teal-50/70 text-slate-700">
-                            <th className="text-left p-3 font-semibold">Traitement</th>
-                            <th className="text-left p-3 font-semibold">Dent</th>
-                            <th className="text-left p-3 font-semibold">Acte réalisé lors de cette séance</th>
-                            <th className="text-left p-3 font-semibold">Statut</th>
+                            <th className="text-left p-3 font-semibold">
+                              Traitement
+                            </th>
+                            <th className="text-left p-3 font-semibold">
+                              Dent
+                            </th>
+                            <th className="text-left p-3 font-semibold">
+                              Acte réalisé lors de cette séance
+                            </th>
+                            <th className="text-left p-3 font-semibold">
+                              Statut
+                            </th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
@@ -837,9 +852,15 @@ export default function PatientVisits({
                       <table className="w-full text-sm border-collapse min-w-[500px]">
                         <thead>
                           <tr className="border-b bg-[var(--color-50)]">
-                            <th className="text-left p-2.5 font-semibold text-gray-700">Bilan</th>
-                            <th className="text-left p-2.5 font-semibold text-gray-700">Résultat</th>
-                            <th className="text-left p-2.5 font-semibold text-gray-700">Remarque</th>
+                            <th className="text-left p-2.5 font-semibold text-gray-700">
+                              Bilan
+                            </th>
+                            <th className="text-left p-2.5 font-semibold text-gray-700">
+                              Résultat
+                            </th>
+                            <th className="text-left p-2.5 font-semibold text-gray-700">
+                              Remarque
+                            </th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100">
@@ -848,9 +869,15 @@ export default function PatientVisits({
                               key={item.id}
                               className="hover:bg-gray-50 transition-colors"
                             >
-                              <td className="p-2.5 text-gray-900 font-medium">{item.bilan?.nom || "—"}</td>
-                              <td className="p-2.5 text-gray-700">{item.resultat || "—"}</td>
-                              <td className="p-2.5 text-gray-600">{item.remarque || "—"}</td>
+                              <td className="p-2.5 text-gray-900 font-medium">
+                                {item.bilan?.nom || "—"}
+                              </td>
+                              <td className="p-2.5 text-gray-700">
+                                {item.resultat || "—"}
+                              </td>
+                              <td className="p-2.5 text-gray-600">
+                                {item.remarque || "—"}
+                              </td>
                             </tr>
                           ))}
                         </tbody>
@@ -884,11 +911,21 @@ export default function PatientVisits({
                       <table className="w-full text-sm border-collapse min-w-[600px]">
                         <thead>
                           <tr className="border-b bg-[var(--color-50)]">
-                            <th className="text-left p-2.5 font-semibold text-gray-700">Médicament</th>
-                            <th className="text-left p-2.5 font-semibold text-gray-700">Dosage</th>
-                            <th className="text-left p-2.5 font-semibold text-gray-700">Fréquence</th>
-                            <th className="text-left p-2.5 font-semibold text-gray-700">Durée</th>
-                            <th className="text-left p-2.5 font-semibold text-gray-700">Quantité</th>
+                            <th className="text-left p-2.5 font-semibold text-gray-700">
+                              Médicament
+                            </th>
+                            <th className="text-left p-2.5 font-semibold text-gray-700">
+                              Dosage
+                            </th>
+                            <th className="text-left p-2.5 font-semibold text-gray-700">
+                              Fréquence
+                            </th>
+                            <th className="text-left p-2.5 font-semibold text-gray-700">
+                              Durée
+                            </th>
+                            <th className="text-left p-2.5 font-semibold text-gray-700">
+                              Quantité
+                            </th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100">
@@ -900,10 +937,18 @@ export default function PatientVisits({
                               <td className="p-2.5 text-gray-900 font-semibold">
                                 {item.medicament?.nom || "—"}
                               </td>
-                              <td className="p-2.5 text-gray-700">{item.dosage || "—"}</td>
-                              <td className="p-2.5 text-gray-700">{item.frequence || "—"}</td>
-                              <td className="p-2.5 text-gray-700">{item.duree || "—"}</td>
-                              <td className="p-2.5 text-gray-700">{item.quantite || "—"}</td>
+                              <td className="p-2.5 text-gray-700">
+                                {item.dosage || "—"}
+                              </td>
+                              <td className="p-2.5 text-gray-700">
+                                {item.frequence || "—"}
+                              </td>
+                              <td className="p-2.5 text-gray-700">
+                                {item.duree || "—"}
+                              </td>
+                              <td className="p-2.5 text-gray-700">
+                                {item.quantite || "—"}
+                              </td>
                             </tr>
                           ))}
                         </tbody>

@@ -45,11 +45,12 @@
         "to": "public"
       },
       {
-        "from": "param.json",
-        "to": "param.json"
+        "from": ".env",
+        "to": ".env"
       }
     ],
     "asarUnpack": [
+      "public",
       "app/generated/prisma",
       "node_modules/@prisma/engines"
     ],

@@ -3,6 +3,119 @@ import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
 
+const ALL_MODELS = [
+  "Cabinet",
+  "Patient",
+  "Consultation",
+  "RendezVous",
+  "Radio",
+  "BilanFile",
+  "Ordonnance",
+  "OrdonnanceItem",
+  "Medicament",
+  "Bilan",
+  "BilanRecip",
+  "BilanItem",
+  "BilanType",
+  "BilanTypeItem",
+  "RecetteType",
+  "RecetteTypeItem",
+  "Traitement",
+  "ConsultationTraitement",
+  "Paiement",
+  "Vaccine",
+  "Vaccination",
+  "Justification",
+  "JustificationType",
+  "Depense",
+];
+
+/**
+ * Synchronize auto-increment sequences with MAX(id) for PostgreSQL and SQLite.
+ * Ensures subsequent normal create operations do not throw "Unique constraint failed on the fields: (id)".
+ */
+async function syncAutoIncrementSequences(dbClient) {
+  let isPostgres = false;
+  let isSqlite = false;
+
+  try {
+    const versionRes = await dbClient.$queryRawUnsafe("SELECT version();");
+    if (
+      Array.isArray(versionRes) &&
+      versionRes[0]?.version?.toLowerCase().includes("postgresql")
+    ) {
+      isPostgres = true;
+    }
+  } catch {
+    try {
+      const sqliteVer = await dbClient.$queryRawUnsafe("SELECT sqlite_version();");
+      if (Array.isArray(sqliteVer) && sqliteVer.length > 0) {
+        isSqlite = true;
+      }
+    } catch {
+      // Unknown provider fallback
+    }
+  }
+
+  if (isPostgres) {
+    console.log("[Restore] Synchronizing PostgreSQL auto-increment sequences...");
+    for (const table of ALL_MODELS) {
+      try {
+        const seqResult = await dbClient.$queryRawUnsafe(
+          `SELECT pg_get_serial_sequence('"${table}"', 'id') AS seq;`
+        );
+        const seqName = seqResult[0]?.seq;
+        if (seqName) {
+          const maxResult = await dbClient.$queryRawUnsafe(
+            `SELECT COALESCE(MAX("id"), 0) AS max_id FROM "${table}";`
+          );
+          const maxId = Number(maxResult[0]?.max_id || 0);
+          if (maxId > 0) {
+            await dbClient.$executeRawUnsafe(
+              `SELECT setval('${seqName}', ${maxId}, true);`
+            );
+            console.log(`[Restore] Synced ${table} sequence (${seqName}) to maxId ${maxId}`);
+          } else {
+            await dbClient.$executeRawUnsafe(
+              `SELECT setval('${seqName}', 1, false);`
+            );
+            console.log(`[Restore] Reset ${table} sequence (${seqName}) to 1`);
+          }
+        }
+      } catch (err) {
+        console.warn(`[Restore] Could not sync sequence for table ${table}:`, err.message);
+      }
+    }
+    console.log("[Restore] All PostgreSQL sequences synchronized successfully.");
+  } else if (isSqlite) {
+    console.log("[Restore] Synchronizing SQLite sequence table...");
+    try {
+      const sqliteSeq = await dbClient.$queryRawUnsafe(
+        `SELECT name FROM sqlite_master WHERE type='table' AND name='sqlite_sequence';`
+      );
+      if (sqliteSeq && sqliteSeq.length > 0) {
+        for (const table of ALL_MODELS) {
+          try {
+            const maxResult = await dbClient.$queryRawUnsafe(
+              `SELECT COALESCE(MAX("id"), 0) AS max_id FROM "${table}";`
+            );
+            const maxId = Number(maxResult[0]?.max_id || 0);
+            if (maxId > 0) {
+              await dbClient.$executeRawUnsafe(
+                `INSERT OR REPLACE INTO sqlite_sequence (name, seq) VALUES ('${table}', ${maxId});`
+              );
+            }
+          } catch (sqliteErr) {
+            console.warn(`[Restore] SQLite sequence sync skipped for ${table}:`, sqliteErr.message);
+          }
+        }
+      }
+    } catch (e) {
+      console.warn("[Restore] SQLite sequence sync error:", e.message);
+    }
+  }
+}
+
 export async function POST(req) {
   try {
     let parsedData = null;
@@ -49,16 +162,16 @@ export async function POST(req) {
         if (Array.isArray(data.cabinets)) {
           for (const c of data.cabinets) {
             const cabData = {
-              title: c.title ?? "Professeur",
-              doctorName: c.doctorName ?? "Professeur",
-              doctorNameAr: c.doctorNameAr ?? "بروفيسور",
+              title: c.title ?? "Cabinet Dentaire",
+              doctorName: c.doctorName ?? "Docteur",
+              doctorNameAr: c.doctorNameAr ?? "دكتور",
               specialty:
                 c.specialty ??
-                "Médecin Spécialiste en Pédiatrie et Néonatologie",
+                "Chirurgien Dentiste",
               specialtyAr:
-                c.specialtyAr ?? "طبيبة مختصة في طب الأطفال و حديثي الولادة",
-              cabinetName: c.cabinetName ?? "Cabinet Pédiatrique",
-              cabinetNameAr: c.cabinetNameAr ?? "عيادة طب الأطفال",
+                c.specialtyAr ?? "جراحة و طب الأسنان",
+              cabinetName: c.cabinetName ?? "Cabinet Dentaire",
+              cabinetNameAr: c.cabinetNameAr ?? "عيادة طب الأسنان",
               address: c.address ?? "Rue Frères KAFI logts 38, 1er étage",
               addressAr: c.addressAr ?? "شارع الإخوة كافي عقار 38 الطابق الأول",
               city: c.city ?? "El-Harrouch SKIKDA",
@@ -80,11 +193,25 @@ export async function POST(req) {
         if (Array.isArray(data.medicaments)) {
           for (const m of data.medicaments) {
             if (m.nom) {
-              await tx.medicament.upsert({
-                where: { id: m.id || 0 },
-                update: { nom: m.nom },
-                create: { ...(m.id ? { id: m.id } : {}), nom: m.nom },
+              const existingById = m.id
+                ? await tx.medicament.findUnique({ where: { id: m.id } })
+                : null;
+              const existingByName = await tx.medicament.findUnique({
+                where: { nom: m.nom },
               });
+
+              if (existingById) {
+                await tx.medicament.update({
+                  where: { id: m.id },
+                  data: { nom: m.nom },
+                });
+              } else if (existingByName) {
+                // Name already exists with another ID, preserve existing
+              } else {
+                await tx.medicament.create({
+                  data: { ...(m.id ? { id: m.id } : {}), nom: m.nom },
+                });
+              }
             }
           }
         }
@@ -93,11 +220,25 @@ export async function POST(req) {
         if (Array.isArray(data.bilans)) {
           for (const b of data.bilans) {
             if (b.nom) {
-              await tx.bilan.upsert({
-                where: { id: b.id || 0 },
-                update: { nom: b.nom },
-                create: { ...(b.id ? { id: b.id } : {}), nom: b.nom },
+              const existingById = b.id
+                ? await tx.bilan.findUnique({ where: { id: b.id } })
+                : null;
+              const existingByName = await tx.bilan.findUnique({
+                where: { nom: b.nom },
               });
+
+              if (existingById) {
+                await tx.bilan.update({
+                  where: { id: b.id },
+                  data: { nom: b.nom },
+                });
+              } else if (existingByName) {
+                // Name already exists with another ID, preserve existing
+              } else {
+                await tx.bilan.create({
+                  data: { ...(b.id ? { id: b.id } : {}), nom: b.nom },
+                });
+              }
             }
           }
         }
@@ -107,11 +248,25 @@ export async function POST(req) {
           for (const v of data.vaccines) {
             if (v.name || v.nom) {
               const vName = v.name || v.nom;
-              await tx.vaccine.upsert({
-                where: { id: v.id || 0 },
-                update: { name: vName },
-                create: { ...(v.id ? { id: v.id } : {}), name: vName },
+              const existingById = v.id
+                ? await tx.vaccine.findUnique({ where: { id: v.id } })
+                : null;
+              const existingByName = await tx.vaccine.findUnique({
+                where: { name: vName },
               });
+
+              if (existingById) {
+                await tx.vaccine.update({
+                  where: { id: v.id },
+                  data: { name: vName },
+                });
+              } else if (existingByName) {
+                // Name already exists with another ID, preserve existing
+              } else {
+                await tx.vaccine.create({
+                  data: { ...(v.id ? { id: v.id } : {}), name: vName },
+                });
+              }
             }
           }
         }
@@ -120,15 +275,29 @@ export async function POST(req) {
         if (Array.isArray(data.justificationTypes)) {
           for (const jt of data.justificationTypes) {
             if (jt.nom) {
-              await tx.justificationType.upsert({
-                where: { id: jt.id || 0 },
-                update: { nom: jt.nom, texte: jt.texte || "" },
-                create: {
-                  ...(jt.id ? { id: jt.id } : {}),
-                  nom: jt.nom,
-                  texte: jt.texte || "",
-                },
+              const jtData = { nom: jt.nom, texte: jt.texte || "" };
+              const existingById = jt.id
+                ? await tx.justificationType.findUnique({ where: { id: jt.id } })
+                : null;
+              const existingByName = await tx.justificationType.findUnique({
+                where: { nom: jt.nom },
               });
+
+              if (existingById) {
+                await tx.justificationType.update({
+                  where: { id: jt.id },
+                  data: jtData,
+                });
+              } else if (existingByName) {
+                await tx.justificationType.update({
+                  where: { id: existingByName.id },
+                  data: jtData,
+                });
+              } else {
+                await tx.justificationType.create({
+                  data: { ...(jt.id ? { id: jt.id } : {}), ...jtData },
+                });
+              }
             }
           }
         }
@@ -242,11 +411,28 @@ export async function POST(req) {
                 groupeSanguin: p.groupeSanguin ?? null,
                 createdAt: new Date(p.createdAt || Date.now()),
               };
-              await tx.patient.upsert({
-                where: { id: p.id || 0 },
-                update: pData,
-                create: { ...(p.id ? { id: p.id } : {}), ...pData },
+              const existingById = p.id
+                ? await tx.patient.findUnique({ where: { id: p.id } })
+                : null;
+              const existingByName = await tx.patient.findUnique({
+                where: { nom: p.nom },
               });
+
+              if (existingById) {
+                await tx.patient.update({
+                  where: { id: p.id },
+                  data: pData,
+                });
+              } else if (existingByName) {
+                await tx.patient.update({
+                  where: { id: existingByName.id },
+                  data: pData,
+                });
+              } else {
+                await tx.patient.create({
+                  data: { ...(p.id ? { id: p.id } : {}), ...pData },
+                });
+              }
             }
           }
         }
@@ -549,22 +735,53 @@ export async function POST(req) {
             });
           }
         }
+
+        // 17.5 Dépenses
+        if (Array.isArray(data.depenses)) {
+          for (const d of data.depenses) {
+            if (d.montant !== undefined && d.description) {
+              await tx.depense.upsert({
+                where: { id: d.id || 0 },
+                update: {
+                  montant: parseFloat(d.montant) || 0,
+                  description: d.description,
+                  date: new Date(d.date || Date.now()),
+                  createdAt: new Date(d.createdAt || Date.now()),
+                },
+                create: {
+                  ...(d.id ? { id: d.id } : {}),
+                  montant: parseFloat(d.montant) || 0,
+                  description: d.description,
+                  date: new Date(d.date || Date.now()),
+                  createdAt: new Date(d.createdAt || Date.now()),
+                },
+              });
+            }
+          }
+        }
+
+        // 18. Synchronize all auto-increment sequences with MAX(id)
+        await syncAutoIncrementSequences(tx);
       },
       {
         timeout: 60000, // 60 seconds timeout for full db restoration
       },
     );
 
+    // Double-check sequence synchronization on the main client
+    await syncAutoIncrementSequences(prisma);
+
     return NextResponse.json({
       success: true,
       message: "Base de données restaurée avec succès.",
     });
   } catch (error) {
-    console.error("Restore API Error:", error);
+    console.error("[Restore API Error]:", error);
     return NextResponse.json(
       {
         error:
-          "Échec de la restauration de la base de données: " + error.message,
+          "Échec de la restauration de la base de données: " +
+          (error.message || "Erreur interne"),
       },
       { status: 500 },
     );

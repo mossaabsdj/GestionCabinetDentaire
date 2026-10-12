@@ -181,6 +181,80 @@ export async function GET(req) {
       dent: p.traitement?.dent || null,
     }));
 
+    // 10. Monthly Profit & Expenses calculations
+    const startOfCurrentMonth = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
+    const endOfCurrentMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+
+    // Payments in current calendar month
+    const currentMonthPaiements = await prisma.paiement.findMany({
+      where: {
+        date: {
+          gte: startOfCurrentMonth,
+          lte: endOfCurrentMonth,
+        },
+      },
+      orderBy: { date: "desc" },
+      include: {
+        patient: { select: { id: true, nom: true } },
+        traitement: { select: { id: true, description: true, dent: true } },
+      },
+    });
+
+    const currentMonthEncaisse = currentMonthPaiements.reduce(
+      (sum, p) => sum + (Number(p.montant) || 0),
+      0
+    );
+
+    // Expenses in current calendar month
+    const currentMonthDepenses = await prisma.depense.findMany({
+      where: {
+        date: {
+          gte: startOfCurrentMonth,
+          lte: endOfCurrentMonth,
+        },
+      },
+      orderBy: { date: "desc" },
+    });
+
+    const currentMonthTotalDepenses = currentMonthDepenses.reduce(
+      (sum, d) => sum + (Number(d.montant) || 0),
+      0
+    );
+
+    const currentMonthBenefice = currentMonthEncaisse - currentMonthTotalDepenses;
+
+    // Detailed lists for the modal
+    const currentMonthPaiementsList = currentMonthPaiements.map((p) => ({
+      id: p.id,
+      date: p.date,
+      patientNom: p.patient?.nom || "—",
+      patientId: p.patientId,
+      montant: Number(p.montant) || 0,
+      traitementDesc: p.traitement?.description || "Versement libre",
+      dent: p.traitement?.dent || null,
+      note: p.note || null,
+    }));
+
+    const currentMonthDepensesList = currentMonthDepenses.map((d) => ({
+      id: d.id,
+      date: d.date,
+      description: d.description,
+      montant: Number(d.montant) || 0,
+    }));
+
+    // Period expenses
+    const depensesWhere = {};
+    if (Object.keys(dateFilter).length > 0) {
+      depensesWhere.date = dateFilter;
+    }
+    const periodDepenses = await prisma.depense.findMany({
+      where: depensesWhere,
+    });
+    const totalDepenses = periodDepenses.reduce(
+      (sum, d) => sum + (Number(d.montant) || 0),
+      0
+    );
+
     return NextResponse.json({
       totalBilled,
       totalEncaisse,
@@ -193,6 +267,15 @@ export async function GET(req) {
       topTraitements,
       patientsDebiteurs,
       recentVersements,
+      // Monthly Profit stats & details
+      currentMonthEncaisse,
+      currentMonthTotalDepenses,
+      currentMonthBenefice,
+      currentMonthPaiementsCount: currentMonthPaiements.length,
+      currentMonthDepensesCount: currentMonthDepenses.length,
+      currentMonthPaiementsList,
+      currentMonthDepensesList,
+      totalDepenses,
     });
   } catch (error) {
     console.error("GET /api/Stats/finance error:", error);

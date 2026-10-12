@@ -36,7 +36,6 @@ import {
 } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { printOrdonnance, printBilan, printJustification } from "@/lib/printer";
-import param from "@/param.json";
 
 export default function PrescriptionModal({
   open = true,
@@ -72,6 +71,7 @@ export default function PrescriptionModal({
 
   const [bilanTypes, setBilanTypes] = useState([]);
   const [justifTypes, setJustifTypes] = useState([]);
+  const [cabinetInfo, setCabinetInfo] = useState(null);
   const [tmpfreq, setTmpfreq] = useState("");
   const [tmpDose, setTmpDose] = useState("");
   const [tmpDuration, setTmpDuration] = useState("");
@@ -202,6 +202,16 @@ export default function PrescriptionModal({
       }
     }
 
+    async function fetchCabinet() {
+      try {
+        const res = await fetch("/api/cabinet");
+        const data = await res.json();
+        if (isMounted && data) setCabinetInfo(data);
+      } catch (err) {
+        console.error("Erreur de chargement du cabinet", err);
+      }
+    }
+
     async function loadAll() {
       setLoading(true);
       try {
@@ -211,6 +221,7 @@ export default function PrescriptionModal({
           fetchBilans(),
           fetchBilanTypes(),
           fetchJustifTypes(),
+          fetchCabinet(),
         ]);
       } finally {
         if (isMounted) setLoading(false);
@@ -1325,7 +1336,7 @@ export default function PrescriptionModal({
                 <div className="ord-print-header">
                   <div className="ord-print-title">Ordonnance Médicale</div>
                   <div className="ord-print-doc">
-                    {param.doctorName || "Professeur"}
+                    {cabinetInfo?.doctorName || "Docteur"}
                   </div>
                   <div className="ord-print-date">
                     {new Date().toLocaleDateString("fr-FR", {
@@ -1604,7 +1615,7 @@ export default function PrescriptionModal({
                           Bilans & Analyses
                         </div>
                         <div className="bilan-print-doc">
-                          {param.doctorName || "Professeur"}
+                          {cabinetInfo?.doctorName || "Docteur"}
                         </div>
                         <div className="bilan-print-date">
                           {new Date().toLocaleDateString("fr-FR", {

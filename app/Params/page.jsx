@@ -162,6 +162,54 @@ export default function ParametrePage() {
     setCabinet((prev) => ({ ...prev, [field]: value }));
   };
 
+  // === Helper: Compress and convert image to Base64 Data URL ===
+  const processImageFile = (file) => {
+    return new Promise((resolve, reject) => {
+      // SVGs don't need canvas downscaling
+      if (file.type === "image/svg+xml") {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+        return;
+      }
+
+      const reader = new FileReader();
+      reader.onerror = reject;
+      reader.onload = (e) => {
+        const img = new Image();
+        img.onerror = () => resolve(e.target.result); // Fallback to raw base64
+        img.onload = () => {
+          const MAX_DIM = 500;
+          let width = img.width;
+          let height = img.height;
+
+          if (width > MAX_DIM || height > MAX_DIM) {
+            if (width > height) {
+              height = Math.round((height * MAX_DIM) / width);
+              width = MAX_DIM;
+            } else {
+              width = Math.round((width * MAX_DIM) / height);
+              height = MAX_DIM;
+            }
+          }
+
+          const canvas = document.createElement("canvas");
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext("2d");
+          ctx.drawImage(img, 0, 0, width, height);
+
+          const mime = file.type === "image/jpeg" ? "image/jpeg" : "image/png";
+          const dataUrl = canvas.toDataURL(mime, 0.92);
+          resolve(dataUrl);
+        };
+        img.src = e.target.result;
+      };
+      reader.readAsDataURL(file);
+    });
+  };
+
   // === Handle Logo Upload ===
   const handleLogoUpload = async (e) => {
     const file = e.target.files?.[0];
@@ -169,42 +217,54 @@ export default function ParametrePage() {
 
     try {
       setUploadingLogo(true);
-      const formData = new FormData();
-      formData.append("file", file);
 
-      const res = await fetch("/api/upload", {
-        method: "POST",
-        body: formData,
+      // 1. Process image to optimized Base64 data URL
+      const dataUrl = await processImageFile(file);
+
+      // 2. Also upload to disk as file backup
+      try {
+        const formData = new FormData();
+        formData.append("file", file);
+        await fetch("/api/upload", {
+          method: "POST",
+          body: formData,
+        });
+      } catch (uploadErr) {
+        console.warn("Server file upload failed, using Base64 data:", uploadErr);
+      }
+
+      // 3. Immediately update state and save to database
+      const updatedCabinet = { ...cabinet, logo: dataUrl };
+      setCabinet(updatedCabinet);
+
+      const res = await fetch("/api/cabinet", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(updatedCabinet),
       });
 
-      if (res.ok) {
-        const data = await res.json();
-        const logoUrl = data.url || `/uploads/${file.name.replace(/ /g, "_")}`;
-        setCabinet((prev) => ({ ...prev, logo: logoUrl }));
-        showAlert(
-          "success",
-          "Logo mis à jour",
-          "Le nouveau logo a été chargé avec succès.",
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(
+          errData.error || "Erreur lors de l'enregistrement du logo.",
         );
-      } else {
-        const reader = new FileReader();
-        reader.onload = () => {
-          setCabinet((prev) => ({ ...prev, logo: reader.result }));
-          showAlert(
-            "success",
-            "Logo mis à jour",
-            "Le nouveau logo a été chargé.",
-          );
-        };
-        reader.readAsDataURL(file);
       }
+
+      const savedCabinet = await res.json();
+      setCabinet((prev) => ({ ...prev, ...savedCabinet, logo: dataUrl }));
+
+      showAlert(
+        "success",
+        "Logo mis à jour",
+        "Le nouveau logo a été enregistré avec succès.",
+      );
     } catch (err) {
-      console.warn("Upload fallback to base64:", err);
-      const reader = new FileReader();
-      reader.onload = () => {
-        setCabinet((prev) => ({ ...prev, logo: reader.result }));
-      };
-      reader.readAsDataURL(file);
+      console.error("Erreur mise à jour logo:", err);
+      showAlert(
+        "error",
+        "Erreur",
+        err.message || "Impossible de charger le nouveau logo.",
+      );
     } finally {
       setUploadingLogo(false);
       if (logoInputRef.current) logoInputRef.current.value = "";
@@ -426,7 +486,7 @@ export default function ParametrePage() {
             className="max-h-full max-w-full object-contain"
             onError={(e) => {
               e.target.onerror = null;
-              e.target.src = "/icon.ico";
+              e.target.src = "/uploads/image.PNG";
             }}
           />
         </div>
@@ -569,7 +629,7 @@ export default function ParametrePage() {
                               className="max-h-full max-w-full object-contain"
                               onError={(e) => {
                                 e.target.onerror = null;
-                                e.target.src = "/icon.ico";
+                                e.target.src = "/uploads/image.PNG";
                               }}
                             />
                           ) : (

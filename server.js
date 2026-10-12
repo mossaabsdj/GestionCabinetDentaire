@@ -10,6 +10,13 @@ const port = process.env.PORT || 3000;
 app.prepare().then(() => {
   const server = express();
   console.log("server here");
+
+  // Serve static uploads directory so newly uploaded files at runtime are accessible in production
+  server.use(
+    "/uploads",
+    express.static(path.join(__dirname, "public", "uploads")),
+  );
+
   server.all("*splat", (req, res) => {
     handle(req, res);
   });

@@ -1,9 +1,12 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import { useEffect, useState } from "react";
 import {
   DollarSign,
   TrendingUp,
+  Receipt,
+  TrendingDown,
   CreditCard,
   AlertCircle,
   Activity,
@@ -16,11 +19,29 @@ import {
   Search,
   User,
   ChevronRight,
+  Wallet,
   Sparkles,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import {
   ResponsiveContainer,
   AreaChart,
@@ -32,7 +53,6 @@ import {
   Tooltip,
   CartesianGrid,
 } from "recharts";
-import { motion } from "framer-motion";
 import { useRouter } from "next/navigation";
 
 export default function FinanceDashboardPage() {
@@ -41,6 +61,8 @@ export default function FinanceDashboardPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [period, setPeriod] = useState("all"); // 'all', 'month', 'quarter', 'year'
+  const [profitModalOpen, setProfitModalOpen] = useState(false);
+  const [modalSearch, setModalSearch] = useState("");
 
   const fetchFinanceStats = async () => {
     setLoading(true);
@@ -67,7 +89,8 @@ export default function FinanceDashboardPage() {
       }
 
       const res = await fetch(queryUrl);
-      if (!res.ok) throw new Error("Erreur de chargement des données financières");
+      if (!res.ok)
+        throw new Error("Erreur de chargement des données financières");
       const json = await res.json();
       setData(json);
     } catch (err) {
@@ -81,6 +104,25 @@ export default function FinanceDashboardPage() {
   useEffect(() => {
     fetchFinanceStats();
   }, [period]);
+
+  const currentMonthFormatted = new Date().toLocaleDateString("fr-FR", {
+    month: "long",
+    year: "numeric",
+  });
+  const capitalizedMonth =
+    currentMonthFormatted.charAt(0).toUpperCase() +
+    currentMonthFormatted.slice(1);
+
+  const filteredPaiements = (data?.currentMonthPaiementsList || []).filter(
+    (p) =>
+      p.patientNom?.toLowerCase().includes(modalSearch.toLowerCase()) ||
+      p.traitementDesc?.toLowerCase().includes(modalSearch.toLowerCase()) ||
+      (p.note && p.note.toLowerCase().includes(modalSearch.toLowerCase())),
+  );
+
+  const filteredDepenses = (data?.currentMonthDepensesList || []).filter((d) =>
+    d.description?.toLowerCase().includes(modalSearch.toLowerCase()),
+  );
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-[var(--color-50)] via-white to-slate-50 p-4 md:p-8">
@@ -99,7 +141,8 @@ export default function FinanceDashboardPage() {
                   Finances & Trésorerie
                 </h1>
                 <p className="text-xs md:text-sm text-slate-500 font-medium">
-                  Suivi des encaissements, des dettes patients et de l'activité financière du cabinet
+                  Suivi des encaissements, des dettes patients et de l'activité
+                  financière du cabinet
                 </p>
               </div>
             </div>
@@ -178,7 +221,7 @@ export default function FinanceDashboardPage() {
         {/* ======================================================== */}
         {/* KPI CARDS */}
         {/* ======================================================== */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
           {/* Card 1: Total Facturé */}
           <motion.div
             initial={{ opacity: 0, y: 15 }}
@@ -233,11 +276,65 @@ export default function FinanceDashboardPage() {
             </p>
           </motion.div>
 
-          {/* Card 3: Reste à Recouvrer */}
+          {/* Card 3: Bénéfice du Mois (Clickable Modal) */}
           <motion.div
             initial={{ opacity: 0, y: 15 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.2, delay: 0.1 }}
+            transition={{ duration: 0.2, delay: 0.08 }}
+            onClick={() => setProfitModalOpen(true)}
+            className="p-5 rounded-2xl bg-white border border-emerald-300 shadow-sm hover:shadow-md hover:border-emerald-400 hover:ring-2 hover:ring-emerald-200/50 transition-all cursor-pointer relative overflow-hidden group flex flex-col justify-between"
+          >
+            <div>
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-xs font-semibold uppercase tracking-wider text-emerald-800 flex items-center gap-1.5">
+                  Bénéfice du Mois
+                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700">
+                    Net
+                  </span>
+                </span>
+                <div className="p-2 rounded-xl bg-emerald-600 text-white group-hover:scale-105 transition-transform shadow-xs">
+                  <TrendingUp className="w-4 h-4" />
+                </div>
+              </div>
+              <div
+                className={`text-2xl font-extrabold ${
+                  Number(data?.currentMonthBenefice || 0) >= 0
+                    ? "text-emerald-700"
+                    : "text-rose-700"
+                }`}
+              >
+                {loading ? (
+                  <div className="h-8 w-28 bg-slate-100 animate-pulse rounded" />
+                ) : (
+                  `${Number(data?.currentMonthBenefice || 0).toLocaleString("fr-FR")} DZD`
+                )}
+              </div>
+              <div className="flex items-center justify-between mt-1 text-xs">
+                <span className="text-slate-500 truncate">
+                  Encaissé:{" "}
+                  {Number(data?.currentMonthEncaisse || 0).toLocaleString(
+                    "fr-FR",
+                  )}
+                </span>
+                <span className="text-rose-500 font-medium ml-1">
+                  -
+                  {Number(data?.currentMonthTotalDepenses || 0).toLocaleString(
+                    "fr-FR",
+                  )}
+                </span>
+              </div>
+            </div>
+            <div className="mt-3 pt-2 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-400 group-hover:text-emerald-700 font-semibold transition-colors">
+              <span>Voir le détail</span>
+              <ArrowUpRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
+            </div>
+          </motion.div>
+
+          {/* Card 4: Reste à Recouvrer */}
+          <motion.div
+            initial={{ opacity: 0, y: 15 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.2, delay: 0.12 }}
             className="p-5 rounded-2xl bg-white border border-rose-200 shadow-sm hover:shadow-md transition-shadow relative overflow-hidden"
           >
             <div className="flex items-center justify-between mb-3">
@@ -260,7 +357,7 @@ export default function FinanceDashboardPage() {
             </p>
           </motion.div>
 
-          {/* Card 4: Traitements */}
+          {/* Card 5: Traitements en cours */}
           <motion.div
             initial={{ opacity: 0, y: 15 }}
             animate={{ opacity: 1, y: 0 }}
@@ -283,7 +380,8 @@ export default function FinanceDashboardPage() {
               )}
             </div>
             <p className="text-xs text-slate-400 mt-1">
-              {data?.countTermine || 0} terminés · {data?.countAnnule || 0} annulés
+              {data?.countTermine || 0} terminés · {data?.countAnnule || 0}{" "}
+              annulés
             </p>
           </motion.div>
         </div>
@@ -318,7 +416,13 @@ export default function FinanceDashboardPage() {
                       margin={{ top: 10, right: 20, left: 0, bottom: 0 }}
                     >
                       <defs>
-                        <linearGradient id="colorRevenu" x1="0" y1="0" x2="0" y2="1">
+                        <linearGradient
+                          id="colorRevenu"
+                          x1="0"
+                          y1="0"
+                          x2="0"
+                          y2="1"
+                        >
                           <stop
                             offset="5%"
                             stopColor="var(--mycolor-600, #059669)"
@@ -331,7 +435,11 @@ export default function FinanceDashboardPage() {
                           />
                         </linearGradient>
                       </defs>
-                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                      <CartesianGrid
+                        strokeDasharray="3 3"
+                        vertical={false}
+                        stroke="#f1f5f9"
+                      />
                       <XAxis
                         dataKey="label"
                         tick={{ fontSize: 11, fill: "#64748b" }}
@@ -389,7 +497,10 @@ export default function FinanceDashboardPage() {
             <CardContent className="pt-4 space-y-3.5 flex-1 overflow-y-auto">
               {loading ? (
                 Array.from({ length: 4 }).map((_, i) => (
-                  <div key={i} className="h-10 bg-slate-50 animate-pulse rounded-xl" />
+                  <div
+                    key={i}
+                    className="h-10 bg-slate-50 animate-pulse rounded-xl"
+                  />
                 ))
               ) : data?.topTraitements?.length > 0 ? (
                 data.topTraitements.map((item, idx) => (
@@ -414,8 +525,8 @@ export default function FinanceDashboardPage() {
                             Math.round(
                               (item.revenuTotal /
                                 (data.topTraitements[0]?.revenuTotal || 1)) *
-                                100
-                            )
+                                100,
+                            ),
                           )}%`,
                         }}
                       />
@@ -454,7 +565,10 @@ export default function FinanceDashboardPage() {
               <div className="divide-y divide-slate-100">
                 {loading ? (
                   Array.from({ length: 4 }).map((_, i) => (
-                    <div key={i} className="p-4 flex items-center justify-between animate-pulse">
+                    <div
+                      key={i}
+                      className="p-4 flex items-center justify-between animate-pulse"
+                    >
                       <div className="h-4 w-32 bg-slate-100 rounded" />
                       <div className="h-4 w-20 bg-slate-100 rounded" />
                     </div>
@@ -513,7 +627,10 @@ export default function FinanceDashboardPage() {
               <div className="divide-y divide-slate-100">
                 {loading ? (
                   Array.from({ length: 4 }).map((_, i) => (
-                    <div key={i} className="p-4 flex items-center justify-between animate-pulse">
+                    <div
+                      key={i}
+                      className="p-4 flex items-center justify-between animate-pulse"
+                    >
                       <div className="h-4 w-32 bg-slate-100 rounded" />
                       <div className="h-4 w-20 bg-slate-100 rounded" />
                     </div>
@@ -568,8 +685,317 @@ export default function FinanceDashboardPage() {
             </CardContent>
           </Card>
         </div>
+
+        {/* ───────── Imports needed at the top of the file ─────────
+import { motion, AnimatePresence } from "framer-motion";
+import { TrendingUp, TrendingDown, Receipt, Search, ChevronRight, Wallet } from "lucide-react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+────────────────────────────────────────────────────────── */}
+
+        <Dialog open={profitModalOpen} onOpenChange={setProfitModalOpen}>
+          <DialogContent className="w-[96vw] max-w-6xl sm:max-w-6xl max-h-[92vh] flex flex-col p-0 overflow-hidden rounded-2xl border-[var(--color-200)] shadow-2xl">
+            {/* ───── Header ───── */}
+            <DialogHeader className="p-5 pb-4 border-b border-[var(--color-100)] bg-gradient-to-r from-[var(--color-100)] to-[var(--color-50)]">
+              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+                <div>
+                  <DialogTitle className="text-xl font-bold text-[var(--color-700)] flex items-center gap-3">
+                    <span className="p-2 rounded-xl bg-white shadow-sm text-[var(--color-600)]">
+                      <Wallet className="w-5 h-5" />
+                    </span>
+                    Détail du Bénéfice Net — {capitalizedMonth}
+                  </DialogTitle>
+                  <DialogDescription className="text-xs text-gray-500 mt-1">
+                    Encaissements perçus et charges d'exploitation du mois en
+                    cours
+                  </DialogDescription>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <div className="relative w-full lg:w-64">
+                    <Search className="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 text-[var(--color-500)] pointer-events-none" />
+                    <Input
+                      type="text"
+                      placeholder="Filtrer versements et dépenses..."
+                      value={modalSearch}
+                      onChange={(e) => setModalSearch(e.target.value)}
+                      className="h-9 text-xs pr-9 bg-white border-[var(--color-200)] focus:ring-2 focus:ring-[var(--color-400)]"
+                      autoComplete="off"
+                    />
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      setProfitModalOpen(false);
+                      router.push("/Depenses");
+                    }}
+                    className="h-9 px-3 text-xs whitespace-nowrap text-[var(--color-700)] hover:bg-white/70"
+                  >
+                    Gérer dépenses
+                    <ChevronRight className="w-3.5 h-3.5 ml-0.5" />
+                  </Button>
+                </div>
+              </div>
+
+              {/* Summary cards */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-4">
+                <div className="p-4 bg-white border border-[var(--color-200)] rounded-xl shadow-sm">
+                  <div className="flex items-center justify-between text-xs font-medium text-gray-500">
+                    <span className="flex items-center gap-1.5">
+                      <TrendingUp className="w-3.5 h-3.5 text-[var(--color-500)]" />
+                      Revenus encaissés
+                    </span>
+                    <span className="text-[10px] bg-[var(--color-50)] text-green-600 px-2 py-0.5 rounded-full font-semibold">
+                      {data?.currentMonthPaiementsCount || 0} versement(s)
+                    </span>
+                  </div>
+                  <div className="text-xl font-bold text-green-600 mt-2">
+                    +
+                    {Number(data?.currentMonthEncaisse || 0).toLocaleString(
+                      "fr-FR",
+                    )}
+                    <span className="text-xs font-medium ml-1">DZD</span>
+                  </div>
+                </div>
+
+                <div className="p-4 bg-white border border-[var(--color-200)] rounded-xl shadow-sm">
+                  <div className="flex items-center justify-between text-xs font-medium text-gray-500">
+                    <span className="flex items-center gap-1.5">
+                      <TrendingDown className="w-3.5 h-3.5 text-[var(--color-500)]" />
+                      Dépenses du cabinet
+                    </span>
+                    <span className="text-[10px] bg-[var(--color-50)] text-red-600 px-2 py-0.5 rounded-full font-semibold">
+                      {data?.currentMonthDepensesCount || 0} dépense(s)
+                    </span>
+                  </div>
+                  <div className="text-xl font-bold text-red-600 mt-2">
+                    -
+                    {Number(
+                      data?.currentMonthTotalDepenses || 0,
+                    ).toLocaleString("fr-FR")}
+                    <span className="text-xs font-medium ml-1">DZD</span>
+                  </div>
+                </div>
+
+                <div className="p-4 rounded-xl shadow-md text-white bg-gradient-to-br from-[var(--color-500)] to-[var(--color-700)]">
+                  <div className="flex items-center justify-between text-xs font-medium text-white/90">
+                    <span>Bénéfice net</span>
+                    <span className="text-[10px] bg-white/20 px-2 py-0.5 rounded-full font-semibold">
+                      {Number(data?.currentMonthBenefice || 0) >= 0
+                        ? "Positif"
+                        : "Déficit"}
+                    </span>
+                  </div>
+                  <div className="text-xl font-black mt-2">
+                    {Number(data?.currentMonthBenefice || 0).toLocaleString(
+                      "fr-FR",
+                    )}
+                    <span className="text-xs font-medium ml-1">DZD</span>
+                  </div>
+                </div>
+              </div>
+            </DialogHeader>
+
+            {/* ───── Body: two columns on wide screens ───── */}
+            <div className="flex-1 overflow-y-auto p-5 space-y-4">
+              <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
+                {/* Versements (wider) */}
+                <Card className="lg:col-span-3 border-[var(--color-200)] shadow-md rounded-xl overflow-hidden">
+                  <CardHeader className="py-2.5 bg-gradient-to-r from-[var(--color-50)] to-white">
+                    <CardTitle className="text-[var(--color-700)] flex items-center justify-between text-sm">
+                      <span className="flex items-center gap-2">
+                        <TrendingUp
+                          size={16}
+                          className="text-[var(--color-500)]"
+                        />
+                        Versements reçus
+                      </span>
+                      <span className="text-xs bg-[var(--color-100)] px-2 py-0.5 rounded-full">
+                        {filteredPaiements?.length || 0}
+                      </span>
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="p-3">
+                    {filteredPaiements?.length > 0 ? (
+                      <ul className="space-y-2 max-h-80 overflow-y-auto pr-1 scroll-smooth">
+                        <AnimatePresence initial={false}>
+                          {filteredPaiements.map((pmt) => (
+                            <motion.li
+                              key={pmt.id}
+                              layout
+                              initial={{ opacity: 0, x: -16 }}
+                              animate={{ opacity: 1, x: 0 }}
+                              exit={{ opacity: 0, x: 16 }}
+                              transition={{ duration: 0.25 }}
+                              className="flex items-center gap-3 bg-white border border-[var(--color-100)] rounded-xl p-3 shadow-sm hover:border-[var(--color-300)] transition-colors duration-200"
+                            >
+                              <div className="w-8 h-8 shrink-0 rounded-full bg-gradient-to-br from-[var(--color-400)] to-[var(--color-600)] flex items-center justify-center text-white font-semibold text-xs">
+                                {(pmt.patientNom || "?")
+                                  .trim()
+                                  .charAt(0)
+                                  .toUpperCase()}
+                              </div>
+
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-sm font-semibold text-[var(--color-700)] truncate">
+                                    {pmt.patientNom}
+                                  </span>
+                                  <span className="text-[11px] text-gray-400 whitespace-nowrap">
+                                    {new Date(pmt.date).toLocaleDateString(
+                                      "fr-FR",
+                                    )}
+                                  </span>
+                                </div>
+                                <div className="text-xs text-gray-500 mt-1 flex flex-wrap items-center gap-1">
+                                  {pmt.traitementDesc && (
+                                    <span className="bg-[var(--color-50)] px-1.5 py-0.5 rounded line-clamp-1">
+                                      {pmt.traitementDesc}
+                                    </span>
+                                  )}
+                                  {pmt.dent && (
+                                    <span className="bg-[var(--color-50)] px-1.5 py-0.5 rounded">
+                                      Dent {pmt.dent}
+                                    </span>
+                                  )}
+                                  {pmt.note && (
+                                    <span className="italic text-gray-400">
+                                      {pmt.note}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+
+                              <div className="text-sm font-bold text-[var(--color-700)] whitespace-nowrap">
+                                +{Number(pmt.montant).toLocaleString("fr-FR")}{" "}
+                                DZD
+                              </div>
+                            </motion.li>
+                          ))}
+                        </AnimatePresence>
+                      </ul>
+                    ) : (
+                      <div className="h-40 flex flex-col items-center justify-center text-gray-400 text-sm">
+                        <TrendingUp size={32} className="mb-3 opacity-30" />
+                        <p className="font-medium">
+                          {modalSearch
+                            ? "Aucun versement ne correspond à votre recherche"
+                            : "Aucun versement enregistré pour ce mois"}
+                        </p>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+
+                {/* Dépenses */}
+                <Card className="lg:col-span-2 border-[var(--color-200)] shadow-md rounded-xl overflow-hidden">
+                  <CardHeader className="py-2.5 bg-gradient-to-r from-[var(--color-50)] to-white">
+                    <CardTitle className="text-[var(--color-700)] flex items-center justify-between text-sm">
+                      <span className="flex items-center gap-2">
+                        <Receipt
+                          size={16}
+                          className="text-[var(--color-500)]"
+                        />
+                        Dépenses du cabinet
+                      </span>
+                      <span className="text-xs bg-[var(--color-100)] px-2 py-0.5 rounded-full">
+                        {filteredDepenses?.length || 0}
+                      </span>
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="p-3">
+                    {filteredDepenses?.length > 0 ? (
+                      <ul className="space-y-2 max-h-80 overflow-y-auto pr-1 scroll-smooth">
+                        <AnimatePresence initial={false}>
+                          {filteredDepenses.map((dep) => (
+                            <motion.li
+                              key={dep.id}
+                              layout
+                              initial={{ opacity: 0, x: -16 }}
+                              animate={{ opacity: 1, x: 0 }}
+                              exit={{ opacity: 0, x: 16 }}
+                              transition={{ duration: 0.25 }}
+                              className="flex items-center gap-3 bg-white border border-[var(--color-100)] rounded-xl p-3 shadow-sm hover:border-[var(--color-300)] transition-colors duration-200"
+                            >
+                              <div className="flex-1 min-w-0">
+                                <div className="text-sm font-semibold text-[var(--color-700)] truncate">
+                                  {dep.description}
+                                </div>
+                                <div className="text-[11px] text-gray-400 mt-0.5">
+                                  {new Date(dep.date).toLocaleDateString(
+                                    "fr-FR",
+                                  )}
+                                </div>
+                              </div>
+                              <div className="text-sm font-bold text-gray-700 whitespace-nowrap">
+                                -{Number(dep.montant).toLocaleString("fr-FR")}{" "}
+                                DZD
+                              </div>
+                            </motion.li>
+                          ))}
+                        </AnimatePresence>
+                      </ul>
+                    ) : (
+                      <div className="h-40 flex flex-col items-center justify-center text-gray-400 text-sm">
+                        <Receipt size={32} className="mb-3 opacity-30" />
+                        <p className="font-medium">
+                          {modalSearch
+                            ? "Aucune dépense ne correspond à votre recherche"
+                            : "Aucune dépense enregistrée pour ce mois"}
+                        </p>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* ── Calculation banner ── */}
+              <div className="p-4 rounded-xl bg-gradient-to-r from-[var(--color-50)] to-white border border-[var(--color-200)] shadow-sm">
+                <div className="text-xs font-medium text-[var(--color-700)] mb-2">
+                  Calcul du résultat net
+                </div>
+                <div className="flex flex-wrap items-center gap-2 text-xs">
+                  <div className="px-3 py-1.5 rounded-lg bg-white border border-[var(--color-200)] text-[var(--color-700)] font-bold">
+                    Revenus +
+                    {Number(data?.currentMonthEncaisse || 0).toLocaleString(
+                      "fr-FR",
+                    )}{" "}
+                    DZD
+                  </div>
+                  <span className="text-gray-400 font-bold">−</span>
+                  <div className="px-3 py-1.5 rounded-lg bg-white border border-[var(--color-200)] text-gray-700 font-bold">
+                    Dépenses{" "}
+                    {Number(
+                      data?.currentMonthTotalDepenses || 0,
+                    ).toLocaleString("fr-FR")}{" "}
+                    DZD
+                  </div>
+                  <span className="text-gray-400 font-bold">=</span>
+                  <div className="px-3 py-1.5 rounded-lg font-black text-white shadow-md bg-gradient-to-r from-[var(--color-500)] to-[var(--color-700)]">
+                    Bénéfice net{" "}
+                    {Number(data?.currentMonthBenefice || 0).toLocaleString(
+                      "fr-FR",
+                    )}{" "}
+                    DZD
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* ───── Footer ───── */}
+            <DialogFooter className="p-4 bg-[var(--color-50)] border-t border-[var(--color-100)] flex items-center justify-end">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setProfitModalOpen(false)}
+                className="rounded-xl border-[var(--color-300)] text-[var(--color-700)] hover:bg-[var(--color-100)]"
+              >
+                Fermer
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     </div>
   );
 }
-

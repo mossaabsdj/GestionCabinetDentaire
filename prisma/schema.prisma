@@ -340,3 +340,16 @@ model Cabinet {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 }
+
+// ====================
+// Dépenses du Cabinet
+// ====================
+
+model Depense {
+  id          Int      @id @default(autoincrement())
+  montant     Float
+  description String
+  date        DateTime @default(now())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}

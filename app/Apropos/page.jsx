@@ -62,7 +62,6 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
-import param from "@/param.json";
 
 // === Carousel Slides Data (Fonctionnalités Réelles du Cabinet Dentaire) ===
 const CAROUSEL_SLIDES = [
@@ -244,6 +243,20 @@ export default function AproposPage() {
     comment: "",
   });
 
+  const [cabinetData, setCabinetData] = useState({
+    cabinetName: "Cabinet Dentaire",
+    doctorName: "Docteur",
+  });
+
+  useEffect(() => {
+    fetch("/api/cabinet")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data) setCabinetData(data);
+      })
+      .catch(() => {});
+  }, []);
+
   // Skeleton loading on mount
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -325,10 +338,10 @@ export default function AproposPage() {
           </div>
           <div>
             <h2 className="text-base sm:text-lg font-bold text-gray-900 leading-tight">
-              {param.cabinetName || "Cabinet Dentaire"}
+              {cabinetData.cabinetName || "Cabinet Dentaire"}
             </h2>
             <p className="text-xs text-[var(--color-600)] font-semibold">
-              {param.doctorName || "Docteur"}
+              {cabinetData.doctorName || "Docteur"}
             </p>
           </div>
         </div>
@@ -362,9 +375,9 @@ export default function AproposPage() {
           </div>
 
           <h1 className="text-3xl sm:text-4xl md:text-5xl font-extrabold text-gray-900 tracking-tight max-w-4xl mx-auto leading-tight">
-            {param.cabinetName || "Cabinet Dentaire"}{" "}
+            {cabinetData.cabinetName || "Cabinet Dentaire"}{" "}
             <span className="text-transparent bg-clip-text bg-gradient-to-r from-[var(--color-600)] to-[var(--color-400)]">
-              {param.doctorName || "Docteur"}
+              {cabinetData.doctorName || "Docteur"}
             </span>
           </h1>
 

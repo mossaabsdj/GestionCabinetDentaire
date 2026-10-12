@@ -2,15 +2,14 @@ import "@/app/globals.css";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import SidebarPage from "@/app/component/NewSideBar/page";
 import ExitButton from "@/app/component/exitbutton/page";
-import param from "@/param.json";
 import { ThemeProvider } from "@/context/theme-context";
 import { icons } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
 export const metadata = {
-  title: param.title,
-  description: "make world better",
+  title: "Cabinet Dentaire",
+  description: "Application de gestion pour cabinet dentaire",
   icons: {
     icon: "/logo.ico",
   },

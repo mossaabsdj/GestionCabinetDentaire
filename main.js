@@ -6,14 +6,60 @@ const { shell } = require("electron");
 const { Menu } = require("electron");
 const { backupDatabase } = require("./backup");
 const { restoreDatabase } = require("./restore");
-let param = {};
+let prisma;
 try {
-  param = require("./param.json");
+  const { PrismaClient } = require("./app/generated/prisma");
+  prisma = new PrismaClient();
 } catch (e) {
-  try {
-    param = require(path.join(process.execPath, "..", "param.json"));
-  } catch (e2) {}
+  console.warn("[main.js] PrismaClient initialization note:", e.message);
 }
+
+const DEFAULT_CABINET = {
+  title: "Cabinet Dentaire",
+  doctorName: "Docteur",
+  doctorNameAr: "دكتور",
+  specialty: "Chirurgien Dentiste",
+  specialtyAr: "جراحة و طب الأسنان",
+  cabinetName: "Cabinet Dentaire",
+  cabinetNameAr: "عيادة طب الأسنان",
+  address: "Rue Frères KAFI logts 38, 1er étage",
+  addressAr: "شارع الإخوة كافي عقار 38 الطابق الأول",
+  city: "El-Harrouch SKIKDA",
+  cityAr: "(بزاز لعلاوي) الحروش - سكيكدة",
+  phones: "0652 76 89 72 / 0562 24 40 87",
+  logo: "/uploads/image.PNG",
+};
+
+let cachedCabinet = null;
+
+async function getCabinetData() {
+  if (prisma) {
+    try {
+      const dbCabinet = await prisma.cabinet.findFirst();
+      if (dbCabinet) {
+        cachedCabinet = dbCabinet;
+        return dbCabinet;
+      }
+    } catch (e) {
+      console.warn("[main.js] Prisma query cabinet error:", e.message);
+    }
+  }
+
+  // Fallback: try Next.js cabinet API if server is running
+  try {
+    const res = await fetch("http://localhost:3000/api/cabinet");
+    if (res.ok) {
+      const data = await res.json();
+      if (data) {
+        cachedCabinet = data;
+        return data;
+      }
+    }
+  } catch (e) {}
+
+  return cachedCabinet || DEFAULT_CABINET;
+}
+
 let mainWindow;
 let splashWindow;
 let serverProcess;
@@ -186,8 +232,8 @@ function createSplashScreen() {
                 <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2c-2.5 0-4.71-1.28-6-3.22.03-1.99 4-3.08 6-3.08 1.99 0 5.97 1.09 6 3.08-1.29 1.94-3.5 3.22-6 3.22z"/>
               </svg>
             </div>
-            <h1>${param.title}</h1>
-            <div class="subtitle">Pédiatre</div>
+            <h1>${cachedCabinet?.title || cachedCabinet?.cabinetName || "Cabinet Dentaire"}</h1>
+            <div class="subtitle">${cachedCabinet?.specialty || "Chirurgien Dentiste"}</div>
             <div class="loader">
               <div class="loader-bar"></div>
             </div>
@@ -340,7 +386,12 @@ function createMenu() {
   Menu.setApplicationMenu(menu);
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
+  // Pre-load cabinet data from database
+  try {
+    await getCabinetData();
+  } catch (e) {}
+
   // Show splash screen first
   createSplashScreen();
 
@@ -374,25 +425,25 @@ ipcMain.handle("get-app-path", () => {
   return path.dirname(path.dirname(app.getAppPath()));
 });
 
-function getElectronCabinet(customCab = {}) {
-  let currentParam = {};
+ipcMain.handle("get-cabinet", async () => {
+  return await getCabinetData();
+});
+
+async function getElectronCabinet(customCab = {}) {
+  let dbCab = {};
   try {
-    currentParam = require("./param.json");
+    dbCab = await getCabinetData();
   } catch (e) {
-    try {
-      currentParam = require(path.join(process.execPath, "..", "param.json"));
-    } catch (e2) {}
+    dbCab = cachedCabinet || DEFAULT_CABINET;
   }
 
-  const cab = { ...currentParam, ...customCab };
-  const doctorName = cab.doctorName || "Professeur";
-  const doctorNameAr = cab.doctorNameAr || "بروفيسور";
-  const specialty =
-    cab.specialty || "Médecin Spécialiste en Pédiatrie et Néonatologie";
-  const specialtyAr =
-    cab.specialtyAr || "طبيبة مختصة في طب الأطفال و حديثي الولادة";
-  const cabinetName = cab.cabinetName || "Cabinet Pédiatrique";
-  const cabinetNameAr = cab.cabinetNameAr || "عيادة طب الأطفال";
+  const cab = { ...DEFAULT_CABINET, ...dbCab, ...customCab };
+  const doctorName = cab.doctorName || "Docteur";
+  const doctorNameAr = cab.doctorNameAr || "دكتور";
+  const specialty = cab.specialty || "Chirurgien Dentiste";
+  const specialtyAr = cab.specialtyAr || "جراحة و طب الأسنان";
+  const cabinetName = cab.cabinetName || "Cabinet Dentaire";
+  const cabinetNameAr = cab.cabinetNameAr || "عيادة طب الأسنان";
   const address = cab.address || "Rue Frères KAFI logts 38, 1er étage";
   const addressAr = cab.addressAr || "شارع الإخوة كافي عقار 38 الطابق الأول";
   const city = cab.city || "El-Harrouch SKIKDA";
@@ -407,10 +458,15 @@ function getElectronCabinet(customCab = {}) {
     !logo.startsWith("https://")
   ) {
     const cleanPath = logo.startsWith("/") ? logo.slice(1) : logo;
-    const basePath = app.isPackaged
-      ? path.join(process.resourcesPath, "app.asar.unpacked")
-      : path.resolve(__dirname, "..", "app");
-    const fullImagePath = path.join(basePath, "public", cleanPath);
+    const fs = require("fs");
+    const cwdPath = path.join(process.cwd(), "public", cleanPath);
+    let fullImagePath = cwdPath;
+    if (!fs.existsSync(cwdPath)) {
+      const basePath = app.isPackaged
+        ? path.join(path.dirname(process.execPath), "public", cleanPath)
+        : path.resolve(__dirname, "..", "app");
+      fullImagePath = path.join(basePath, "public", cleanPath);
+    }
     imageUrl = `file://${fullImagePath.replace(/\\/g, "/").replace(/ /g, "%20")}`;
   }
 
@@ -430,7 +486,7 @@ function getElectronCabinet(customCab = {}) {
   };
 }
 
-ipcMain.on("printOrdonnance", (event, data) => {
+ipcMain.on("printOrdonnance", async (event, data) => {
   const {
     id,
     nom,
@@ -442,7 +498,7 @@ ipcMain.on("printOrdonnance", (event, data) => {
     cabinet = {},
   } = data;
 
-  const cab = getElectronCabinet(cabinet);
+  const cab = await getElectronCabinet(cabinet);
 
   const printWindow = new BrowserWindow({
     show: true,
@@ -751,7 +807,7 @@ ipcMain.on("printOrdonnance", (event, data) => {
   });
 });
 
-ipcMain.on("printBilan", (event, data) => {
+ipcMain.on("printBilan", async (event, data) => {
   const {
     id,
     nom,
@@ -763,7 +819,7 @@ ipcMain.on("printBilan", (event, data) => {
     cabinet = {},
   } = data;
 
-  const cab = getElectronCabinet(cabinet);
+  const cab = await getElectronCabinet(cabinet);
 
   // 🪟 Allow file access for local image
   const printWindow = new BrowserWindow({
@@ -1017,7 +1073,7 @@ ipcMain.on("printBilan", (event, data) => {
   });
 });
 
-ipcMain.on("printJustification", (event, data) => {
+ipcMain.on("printJustification", async (event, data) => {
   const {
     id,
     nom,
@@ -1029,7 +1085,7 @@ ipcMain.on("printJustification", (event, data) => {
     cabinet = {},
   } = data;
 
-  const cab = getElectronCabinet(cabinet);
+  const cab = await getElectronCabinet(cabinet);
 
   const printWindow = new BrowserWindow({
     show: true,

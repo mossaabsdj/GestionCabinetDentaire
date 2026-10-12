@@ -11,6 +11,7 @@ contextBridge.exposeInMainWorld("electron", {
   //backup: () => ipcRenderer.invoke("electron.backup"), // Expose the backup function
   backup: () => ipcRenderer.invoke("backup-database"),
   restore: () => ipcRenderer.invoke("restore-database"),
+  getCabinet: () => ipcRenderer.invoke("get-cabinet"),
   openFile: (filePath) => ipcRenderer.invoke("open-file", filePath),
   exit: () => ipcRenderer.send("exit"),
 

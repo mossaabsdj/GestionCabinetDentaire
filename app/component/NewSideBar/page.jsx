@@ -1,7 +1,6 @@
 "use client";
 import React, { useState, useEffect } from "react";
 import { useRouter, usePathname } from "next/navigation";
-import param from "@/param.json";
 import Image from "next/image";
 import LoadingScreen from "@/app/component/LoadingScreen/page";
 
@@ -20,14 +19,15 @@ import {
   Calendar,
   Sparkles,
   DollarSign,
+  Receipt,
 } from "lucide-react";
-import app from "@/param.json";
+
 const Sidebar = ({
   items = [],
   onNavigate,
   collapsed = false,
   onToggleCollapse,
-  userInfo = { name: app.title, role: "Médecin" },
+  userInfo = { name: "Cabinet Dentaire", role: "Chirurgien Dentiste" },
   handleparam,
 }) => {
   const [activeItem, setActiveItem] = useState(items[0]?.url || "");
@@ -76,7 +76,7 @@ const Sidebar = ({
                   height={45}
                 />
                 <div>
-                  <h1 className="text-xl font-bold">{param.title}</h1>
+                  <h1 className="text-xl font-bold">{userInfo?.name || "Cabinet Dentaire"}</h1>
                   <p className="text-xs text-[var(--color-300)]">
                     Health System
                   </p>
@@ -198,11 +198,21 @@ export default function App() {
   const [collapsed, setCollapsed] = useState(false);
   const [isElectron, setIsElectron] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [cabinetInfo, setCabinetInfo] = useState({
+    title: "Cabinet Dentaire",
+    specialty: "Chirurgien Dentiste",
+  });
 
   useEffect(() => {
     if (typeof window !== "undefined" && window?.electron) {
       setIsElectron(true);
     }
+    fetch("/api/cabinet")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data) setCabinetInfo(data);
+      })
+      .catch(() => {});
   }, []);
 
   // Do not render sidebar on /Apropos or on web landing page /
@@ -215,6 +225,7 @@ export default function App() {
     { title: "Consulter", url: "Consulter", icon: Stethoscope },
     { title: "Patients", url: "Patients", icon: Users },
     { title: "Finances", url: "Finance", icon: DollarSign },
+    { title: "Dépenses", url: "Depenses", icon: Receipt },
     { title: "Predifined", url: "Predifined", icon: FileText },
     { title: "Médicaments", url: "Medicament", icon: Pill },
     { title: "Bilans", url: "Bilans", icon: TestTube },
@@ -248,8 +259,8 @@ export default function App() {
         onNavigate={handleNavigate}
         handleparam={handleParam}
         userInfo={{
-          name: param.title,
-          role: param.specialty || "Chirurgien Dentiste",
+          name: cabinetInfo?.title || cabinetInfo?.cabinetName || "Cabinet Dentaire",
+          role: cabinetInfo?.specialty || "Chirurgien Dentiste",
         }}
       />
     </div>
