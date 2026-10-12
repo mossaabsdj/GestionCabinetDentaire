@@ -35,6 +35,7 @@
       "server.js",
       "backup.js",
       "restore.js",
+      "print-templates.js",
       "node_modules/**",
       "app/generated/prisma/**",
       "package.json"

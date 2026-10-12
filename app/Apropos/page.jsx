@@ -41,6 +41,11 @@ import {
   Play,
   DollarSign,
   ImageIcon,
+  Receipt,
+  TrendingUp,
+  Wallet,
+  CreditCard,
+  Banknote,
 } from "lucide-react";
 import {
   Card,
@@ -63,37 +68,95 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 
+// === Custom SVG Dental Icons ===
+export function ToothIcon({ className = "w-6 h-6", ...props }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      {...props}
+    >
+      <path d="M4.5 9c0-3.5 2.5-6 6-6 1 0 1.5.5 1.5.5s.5-.5 1.5-.5c3.5 0 6 2.5 6 6 0 3.5-.8 6.5-1.5 9.5-.5 2-2 2.5-3 1-1-1.5-1.5-4-2.5-4s-1.5 2.5-2.5 4c-1 1.5-2.5 1-3-1C5.3 15.5 4.5 12.5 4.5 9z" />
+      <path d="M9 7c.8-.7 1.8-.8 3 0" />
+    </svg>
+  );
+}
+
+export function DentistIcon({ className = "w-6 h-6", ...props }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      {...props}
+    >
+      <circle cx="9" cy="7" r="4" />
+      <path d="M12 10l7.5 7.5" />
+      <path d="M17 15l2.5 2.5" />
+      <path d="M4 21v-2a4 4 0 0 1 4-4h1.5" />
+      <circle cx="17.5" cy="5.5" r="2.5" />
+    </svg>
+  );
+}
+
 // === Carousel Slides Data (Fonctionnalités Réelles du Cabinet Dentaire) ===
 const CAROUSEL_SLIDES = [
   {
     id: 1,
-    title: "Gestion des Soins & Traitements Dentaires",
-    subtitle: "Plans de traitement par dent & Suivi multi-séances",
-    desc: "Création et suivi des plans de traitement avec numérotation dentaire FDI (endodontie, prothèses, chirurgie, composites, implants). Enregistrement des actes réalisés par séance avec modal détaillée et bouton continuer.",
-    badge: "Odontologie & Actes",
-    icon: Sparkles,
+    title: "Gestion des Soins Dentaires & Actes par Dent",
+    subtitle: "Schéma dentaire FDI, multi-séances & suivi clinique",
+    desc: "Création et suivi des plans de traitement avec numérotation dentaire internationale FDI (endodontie, prothèses, chirurgie, composites, implants). Enregistrement des actes réalisés par séance avec modal détaillée et reprise de traitement.",
+    badge: "Odontologie & Actes FDI",
+    icon: ToothIcon,
     color: "from-blue-600 to-cyan-500",
   },
   {
     id: 2,
-    title: "Suivi Financier & Versements Échelonnés",
-    subtitle: "Acomptes, Règlements par tranche & Contrôle des dettes",
-    desc: "Suivi rigoureux de la trésorerie patient : calcul instantané du total dû, total payé et du crédit restant. Gestion des versements liés à un soin ou libres avec contrôle anti-dépassement.",
-    badge: "Finances & Crédits",
-    icon: DollarSign,
+    title: "Finances, Trésorerie & Bénéfice Net Mensuel",
+    subtitle: "Bénéfice Net = Total Encaissé − Total Dépenses",
+    desc: "Suivi en direct de la rentabilité du cabinet : calcul automatique du Bénéfice Net mensuel déduisant les charges des recettes réelles encaissées. Tableau de bord financier clair, suivi des crédits et analyse par période.",
+    badge: "Finances & Bénéfice Net",
+    icon: TrendingUp,
     color: "from-emerald-600 to-teal-500",
   },
   {
     id: 3,
+    title: "Gestion des Dépenses & Charges du Cabinet",
+    subtitle: "Consommables dentaires, laboratoire de prothèse & charges",
+    desc: "Contrôle rigoureux des sorties d'argent du cabinet : consommables dentaires, matériel d'anesthésie, factures du laboratoire de prothèse, loyer et entretien. Interface CRUD complète avec filtres (ce mois, mois précédent, année).",
+    badge: "Dépenses & Fournitures",
+    icon: Receipt,
+    color: "from-amber-600 to-rose-500",
+  },
+  {
+    id: 4,
+    title: "Règlements & Versements Échelonnés",
+    subtitle: "Acomptes, Règlements par séance & Prévention des dettes",
+    desc: "Suivi rigoureux de la trésorerie patient : calcul instantané du montant total des actes, total payé et crédit restant. Gestion des versements strictement rattachés aux traitements avec contrôle anti-dépassement.",
+    badge: "Versements & Crédits",
+    icon: DollarSign,
+    color: "from-teal-600 to-emerald-700",
+  },
+  {
+    id: 5,
     title: "Consultations & Dossier Patient Intégré",
     subtitle: "Examen clinique, Motif & Synthèse en temps réel",
-    desc: "Centralisation des antécédents, observations cliniques et synthèse directe (dernier traitement, dernier versement, traitement en cours et solde dû). Impression immédiate post-sauvegarde.",
+    desc: "Centralisation des antécédents médicaux, observations cliniques et synthèse directe (dernier traitement, dernier versement, traitement en cours et solde dû). Impression immédiate post-sauvegarde.",
     badge: "Consultation Pro",
     icon: Stethoscope,
     color: "from-indigo-600 to-violet-500",
   },
   {
-    id: 4,
+    id: 6,
     title: "Prescriptions & Ordonnances Numériques",
     subtitle: "Recettes types prédéfinies & Impression instantanée",
     desc: "Génération rapide d'ordonnances avec posologies, fréquences et durées adaptées. Bibliothèque de recettes types (avulsion, abcès, implantologie) et impression avec en-tête officiel du cabinet.",
@@ -102,16 +165,16 @@ const CAROUSEL_SLIDES = [
     color: "from-purple-600 to-pink-500",
   },
   {
-    id: 5,
+    id: 7,
     title: "Imagerie, Radiographies & Bilans de Laboratoire",
     subtitle: "Archivage sécurisé des clichés dentaires et analyses",
     desc: "Stockage et visionneuse des radiographies numériques (panoramiques OPG, rétro-alvéolaires, Cône Beam 3D) et prescription de bilans pré-opératoires avec archivage des comptes-rendus PDF.",
     badge: "Radiologie & Analyses",
     icon: TestTube,
-    color: "from-amber-600 to-orange-500",
+    color: "from-sky-600 to-blue-700",
   },
   {
-    id: 6,
+    id: 8,
     title: "Justifications Médicales, Agenda & Statistiques",
     subtitle: "Certificats d'arrêt, Planning des RDV & Tableaux de bord",
     desc: "Édition de certificats médicaux et dispenses post-opératoires, gestion du calendrier des rendez-vous et tableau de bord analytique de l'activité quotidienne, hebdomadaire et mensuelle.",
@@ -124,29 +187,39 @@ const CAROUSEL_SLIDES = [
 // === Real Features Data Grid ===
 const FEATURES = [
   {
-    icon: Sparkles,
-    title: "Plans de Traitement & Actes par Dent",
-    desc: "Définition des soins par dent (FDI), suivi par séance clinique avec actes réalisés, statut dynamique (En cours, Terminé, Annulé) et modal de consultation détaillée.",
+    icon: ToothIcon,
+    title: "Soins Dentaires & Numérotation FDI",
+    desc: "Schéma dentaire international FDI (dents 11 à 48), suivi des actes cliniques par séance (endodontie, composite, prothèses, chirurgie, implants) avec historique par dent et reprise de traitement.",
+  },
+  {
+    icon: TrendingUp,
+    title: "Finances & Bénéfice Net Mensuel",
+    desc: "Indicateur financier stratégique : calcul en temps réel du Bénéfice Net = Total des encaissements du mois − Total des dépenses du mois. Suivi des recettes réelles et de la rentabilité en DZD.",
+  },
+  {
+    icon: Receipt,
+    title: "Gestion des Dépenses & Fournitures",
+    desc: "Enregistrement exhaustif des charges du cabinet : achats de fournitures dentaires, facturation du laboratoire de prothèse, loyer et entretien, avec filtres temporels et totalisation automatique.",
   },
   {
     icon: DollarSign,
-    title: "Gestion Financière & Crédits Patients",
-    desc: "Suivi des versements échelonnés (acomptes et soldes), calcul automatique du total dû, total payé et dette restante avec historique complet filtrable.",
+    title: "Versements Échelonnés & Crédits",
+    desc: "Suivi des acomptes et tranches de règlement par patient, liaison stricte à chaque traitement, contrôle anti-dépassement, calcul automatique du crédit restant et reçu d'encaissement.",
   },
   {
-    icon: Stethoscope,
+    icon: DentistIcon,
     title: "Dossier Patient & Synthèse Clinique",
-    desc: "Fiche médicale exhaustive avec antécédents, synthèse instantanée du traitement en cours, dernier versement et crédit en attente pour une prise en charge rapide.",
+    desc: "Fiche médicale exhaustive avec antécédents, synthèse instantanée du traitement en cours, dernier versement et crédit en attente pour une prise en charge rapide au fauteuil.",
   },
   {
     icon: Pill,
     title: "Ordonnances & Recettes Types",
-    desc: "Bibliothèque thérapeutique dentaire, protocoles d'ordonnances types pré-enregistrés, édition de lignes et impression A4/A5 instantanée post-consultation.",
+    desc: "Bibliothèque thérapeutique dentaire, protocoles d'ordonnances types pré-enregistrés, posologies automatiques et impression A4/A5 instantanée avec en-tête officiel du cabinet.",
   },
   {
     icon: ImageIcon,
     title: "Radiologie & Clichés Numériques",
-    desc: "Archivage et visualisation des radiographies (panoramiques OPG, rétro-alvéolaires, CBCT 3D) rattachées directement aux consultations et au patient.",
+    desc: "Archivage et visualisation haute résolution des radiographies (panoramiques OPG, rétro-alvéolaires, CBCT 3D) rattachées directement aux consultations et au patient.",
   },
   {
     icon: TestTube,
@@ -165,8 +238,13 @@ const FEATURES = [
   },
   {
     icon: Activity,
-    title: "Tableau de Bord & Analytique",
+    title: "Tableau de Bord & Statistiques",
     desc: "Statistiques en temps réel : nombre de consultations, actes les plus pratiqués, flux horaire des visites et suivi de l'activité du cabinet dentaire.",
+  },
+  {
+    icon: ShieldCheck,
+    title: "Sauvegardes & Impression Haute Fidélité",
+    desc: "Sauvegarde sécurisée de la base de données PostgreSQL, export JSON, synchronisation sans perte et moteur d'impression professionnel configurable.",
   },
 ];
 
@@ -180,7 +258,7 @@ const INITIAL_REVIEWS = [
     rating: 5,
     date: "28 Août 2026",
     comment:
-      "Une solution logicielle sur-mesure d'une efficacité remarquable. Le gain de temps sur le suivi des soins par dent et la gestion des versements échelonnés est énorme au quotidien.",
+      "Une solution logicielle sur-mesure d'une efficacité remarquable. Le calcul direct du bénéfice net mensuel, le suivi des dépenses du cabinet et la gestion des soins par dent selon la norme FDI font gagner un temps précieux au quotidien.",
     verified: true,
   },
   {
@@ -191,7 +269,7 @@ const INITIAL_REVIEWS = [
     rating: 5,
     date: "25 Août 2026",
     comment:
-      "L'interface est très agréable et réactive. La recherche des patients, l'enregistrement des versements et l'impression directe des ordonnances et justificatifs se font en quelques secondes !",
+      "L'interface est très agréable et réactive. La recherche des patients, l'enregistrement des versements avec contrôle des crédits et la saisie rapide des dépenses de fournitures se font en quelques secondes !",
     verified: true,
   },
   {
@@ -202,7 +280,7 @@ const INITIAL_REVIEWS = [
     rating: 5,
     date: "15 Août 2026",
     comment:
-      "Excellente gestion des plans de traitement multi-séances, de l'imagerie dentaire et de l'historique par dent. La double utilisation en version Web locale et application de bureau Electron est un vrai atout.",
+      "Excellente gestion des plans de traitement multi-séances, de l'imagerie dentaire et de la trésorerie. La déduction automatique des charges pour calculer le résultat net mensuel est un vrai atout de gestion.",
     verified: true,
   },
 ];
@@ -328,20 +406,28 @@ export default function AproposPage() {
       {/* ======================================================== */}
       <header className="max-w-7xl mx-auto mb-8 p-4 rounded-2xl bg-white/80 backdrop-blur-md border border-[var(--color-200)] shadow-md flex items-center justify-between sticky top-4 z-40">
         <div className="flex items-center gap-3">
-          <div className="w-16 h-16 rounded-xl bg-gradient-to-br from-[var(--color-500)] to-[var(--color-700)] flex items-center justify-center text-white shadow-md">
+          <div className="w-16 h-16 rounded-xl bg-gradient-to-br from-[var(--color-500)] to-[var(--color-700)] flex items-center justify-center text-white shadow-md relative group">
             <Image
               src="/amel.png"
               alt="Cabinet Logo"
               width={45}
               height={45}
             />{" "}
+            <span className="absolute -bottom-1 -right-1 bg-white text-[var(--color-600)] p-1 rounded-full shadow-sm border border-[var(--color-200)] flex items-center justify-center">
+              <ToothIcon className="w-3.5 h-3.5 text-[var(--color-600)]" />
+            </span>
           </div>
           <div>
-            <h2 className="text-base sm:text-lg font-bold text-gray-900 leading-tight">
-              {cabinetData.cabinetName || "Cabinet Dentaire"}
-            </h2>
-            <p className="text-xs text-[var(--color-600)] font-semibold">
-              {cabinetData.doctorName || "Docteur"}
+            <div className="flex items-center gap-1.5">
+              <h2 className="text-base sm:text-lg font-bold text-gray-900 leading-tight">
+                {cabinetData.cabinetName || "Cabinet Dentaire"}
+              </h2>
+              <ToothIcon className="w-4 h-4 text-[var(--color-600)] hidden sm:inline-block" />
+            </div>
+            <p className="text-xs text-[var(--color-600)] font-semibold flex items-center gap-1">
+              <span>{cabinetData.doctorName || "Docteur"}</span>
+              <span className="text-gray-400">•</span>
+              <span className="text-gray-500 font-normal">Chirurgie & Soins Dentaires</span>
             </p>
           </div>
         </div>
@@ -370,7 +456,7 @@ export default function AproposPage() {
           className="relative text-center space-y-6 pt-2 pb-6 overflow-hidden"
         >
           <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-[var(--color-100)] border border-[var(--color-300)] text-[var(--color-700)] text-sm font-semibold shadow-sm">
-            <Sparkles className="w-4 h-4 text-[var(--color-600)] animate-spin-slow" />
+            <ToothIcon className="w-4 h-4 text-[var(--color-600)] animate-pulse" />
             <span>Plateforme Médicale Dentaire & Système de Gestion</span>
           </div>
 
@@ -383,9 +469,8 @@ export default function AproposPage() {
 
           <p className="text-base sm:text-lg text-gray-600 max-w-3xl mx-auto leading-relaxed">
             Application médicale complète conçue pour digitaliser l'ensemble des
-            processus cliniques du cabinet dentaire : dossiers patients, plans de
-            traitement et actes par dent, gestion financière et versements
-            échelonnés, ordonnances normalisées, radiographies et statistiques en
+            processus cliniques et financiers du cabinet dentaire : dossiers patients, plans de
+            traitement et actes par dent (FDI), finances avec bénéfice net en direct, gestion complète des dépenses et fournitures, ordonnances normalisées, radiographies et statistiques en
             temps réel.
           </p>
 
@@ -403,16 +488,24 @@ export default function AproposPage() {
 
           <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
             <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-white border border-gray-200 rounded-lg text-xs font-semibold text-gray-700 shadow-sm">
+              <ToothIcon className="w-3.5 h-3.5 text-cyan-600" />
+              Soins Dentaires & FDI (11–48)
+            </span>
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-white border border-gray-200 rounded-lg text-xs font-semibold text-gray-700 shadow-sm">
+              <TrendingUp className="w-3.5 h-3.5 text-emerald-600" />
+              Finances & Bénéfice Net (DZD)
+            </span>
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-white border border-gray-200 rounded-lg text-xs font-semibold text-gray-700 shadow-sm">
+              <Receipt className="w-3.5 h-3.5 text-rose-600" />
+              Gestion des Dépenses Cabinet
+            </span>
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-white border border-gray-200 rounded-lg text-xs font-semibold text-gray-700 shadow-sm">
               <Globe className="w-3.5 h-3.5 text-blue-600" />
               Mode Web & Desktop Electron
             </span>
             <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-white border border-gray-200 rounded-lg text-xs font-semibold text-gray-700 shadow-sm">
-              <Database className="w-3.5 h-3.5 text-emerald-600" />
+              <Database className="w-3.5 h-3.5 text-indigo-600" />
               PostgreSQL Haute Performance
-            </span>
-            <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-white border border-gray-200 rounded-lg text-xs font-semibold text-gray-700 shadow-sm">
-              <ShieldCheck className="w-3.5 h-3.5 text-purple-600" />
-              Impression A4 / A5 & Sauvegardes
             </span>
           </div>
         </motion.section>
@@ -706,7 +799,7 @@ export default function AproposPage() {
                       Mossaab Saad Djaballah
                     </p>
                     <p className="text-xs text-white/70 mt-1">
-                      Full-Stack Software Engineer & Medical Systems Architect
+                      Full-Stack Software Engineer & Dental Medical Systems Architect
                     </p>
                   </div>
                 </div>
@@ -736,6 +829,8 @@ export default function AproposPage() {
                     "Prisma",
                     "Framer Motion",
                     "Electron",
+                    "Odontologie FDI",
+                    "Finances & Dépenses",
                   ].map((tech) => (
                     <span
                       key={tech}
@@ -975,8 +1070,9 @@ export default function AproposPage() {
                                   <CheckCircle2 className="w-3.5 h-3.5 text-blue-600" />
                                 )}
                               </div>
-                              <div className="text-xs text-gray-500 line-clamp-1">
-                                {rev.role}
+                              <div className="text-xs text-gray-500 line-clamp-1 flex items-center gap-1">
+                                <ToothIcon className="w-3 h-3 text-[var(--color-600)] flex-shrink-0" />
+                                <span>{rev.role}</span>
                               </div>
                             </div>
                           </div>
