@@ -485,10 +485,81 @@ async function getElectronCabinet(customCab = {}) {
     imageUrl,
   };
 }
+const fs = require("fs");
+const os = require("os");
+const {
+  buildOrdonnanceHtml,
+  buildBilanHtml,
+  buildJustificationHtml,
+} = require("./print-templates");
 
-ipcMain.on("printOrdonnance", async (event, data) => {
+/**
+ * Opens a hidden-from-nobody print window, waits until the page has finished its
+ * automatic pagination (window.__printReady), then opens the system print dialog.
+ */
+function runElectronPrint(html, label) {
+  const printWindow = new BrowserWindow({
+    show: true,
+    width: 1000,
+    height: 700,
+    autoHideMenuBar: true,
+    webPreferences: {
+      nodeIntegration: false,
+      contextIsolation: true,
+      webSecurity: false,
+      allowFileAccessFromFileURLs: true,
+      allowUniversalAccessFromFileURLs: true,
+    },
+  });
+
+  // data: URLs are limited in size; fall back to a temp file for very large
+  // documents (e.g. a logo embedded as base64).
+  let tmpFile = null;
+  const dataUrl = "data:text/html;charset=utf-8," + encodeURIComponent(html);
+  if (dataUrl.length < 1800000) {
+    printWindow.loadURL(dataUrl);
+  } else {
+    tmpFile = path.join(os.tmpdir(), `print-${label}-${Date.now()}.html`);
+    fs.writeFileSync(tmpFile, html, "utf8");
+    printWindow.loadFile(tmpFile);
+  }
+
+  printWindow.webContents.on("did-finish-load", async () => {
+    // Wait (max 8s) for the page script to finish measuring / paginating
+    const start = Date.now();
+    while (Date.now() - start < 8000) {
+      try {
+        const ready = await printWindow.webContents.executeJavaScript(
+          "window.__printReady === true",
+        );
+        if (ready) break;
+      } catch (_) {
+        /* page not ready yet */
+      }
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    await new Promise((r) => setTimeout(r, 300)); // let the last paint settle
+
+    printWindow.webContents.print(
+      {
+        silent: false,
+        printBackground: true,
+        margins: { marginType: "none" },
+        pageSize: { name: "A4", width: 297000, height: 210000 },
+        landscape: true,
+      },
+      (success, failureReason) => {
+        if (success) console.log(`🖨️ ${label} printed successfully`);
+        else console.error(`❌ ${label} print failed:`, failureReason);
+        printWindow.close();
+        if (tmpFile) fs.unlink(tmpFile, () => {});
+      },
+    );
+  });
+}
+
+ipcMain.on("printOrdonnance", (event, data = {}) => {
   const {
-    id,
     nom,
     prenom,
     age,
@@ -497,319 +568,19 @@ ipcMain.on("printOrdonnance", async (event, data) => {
     items = [],
     cabinet = {},
   } = data;
-
-  const cab = await getElectronCabinet(cabinet);
-
-  const printWindow = new BrowserWindow({
-    show: true,
-    width: 1000,
-    height: 700,
-    autoHideMenuBar: true,
-    webPreferences: {
-      nodeIntegration: false,
-      contextIsolation: true,
-      webSecurity: false,
-      allowFileAccessFromFileURLs: true,
-      allowUniversalAccessFromFileURLs: true,
-    },
-  });
-
-  // Génération du contenu des médicaments
-  const medListHtml = items
-    .map(
-      (m, i) => `
-        <div class="med-item">
-          <div class="med-header">
-            <div class="med-name">${i + 1}. ${m.name || ""} ${
-              m.dosage || ""
-            }</div>
-            <div class="med-duration">${
-              m.duration ||
-              (m.quantity
-                ? `${m.quantity} boîte${m.quantity > 1 ? "s" : ""}`
-                : "")
-            }</div>
-          </div>
-          <div class="med-frequency">${m.frequency || ""}</div>
-        </div>`,
-    )
-    .join("");
-
-  const printHtml = `
-<!DOCTYPE html>
-<html lang="fr">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Ordonnance Médicale</title>
-  <style>
-    @page {
-      size: A4 landscape;
-      margin: 0;
-    }
-
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-    }
-
-    body {
-      width: 29.7cm;
-      height: 21cm;
-      background: white;
-      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-      color: #1a1a1a;
-    }
-
-    .ord-container {
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 14.85cm;
-      height: 21cm;
-      border: 2px solid #2c3e50;
-      padding: 0.8cm;
-      display: flex;
-      flex-direction: column;
-    }
-
-    /* Order Number - Top Right */
-    .ord-num {
-      position: absolute;
-      top: 0.2cm;
-      right: 0.2cm;
-      font-size: 12px;
-      color: #555;
-      font-weight: 600;
-      background: white;
-      padding: 0.3rem 0.5rem;
-      border-radius: 4px;
-    }
-
-    /* Header Section */
-    .ord-header {
-      border-bottom: 2px solid #2c3e50;
-      padding-bottom: 0.5rem;
-      margin-top: 0rem;
-    }
-
-    .ord-header-top {
-      display: flex;
-      justify-content: space-between;
-      align-items: flex-start;
-      gap: 1rem;
-    }
-
-    .ord-left,
-    .ord-right {
-      flex: 1;
-      font-size: 13px;
-      line-height: 1.5;
-    }
-
-    .ord-center {
-      flex-shrink: 0;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      max-width: 80px;
-    }
-
-    .ord-center img {
-      max-width: 100%;
-      height: auto;
-      max-height: 80px;
-      object-fit: contain;
-    }
-
-    .ord-right {
-      text-align: right;
-      direction: rtl;
-      font-family: 'Arial', sans-serif;
-    }
-
-    .ord-left strong,
-    .ord-right strong {
-      color: #2c3e50;
-      font-size: 14px;
-    }
-
-    .ord-phone {
-      text-align: center;
-      margin-top: 0.5rem;
-      font-weight: 500;
-      font-size: 13px;
-    }
-
-    /* Patient Information */
-    .ord-patient {
-      margin-top: 0.8rem;
-      display: flex;
-      justify-content: space-between;
-      flex-wrap: wrap;
-      gap: 0.5rem;
-      font-size: 14px;
-      padding: 0.5rem;
-    }
-
-    .ord-patient strong {
-      color: #2c3e50;
-    }
-
-    /* Title */
-    .ord-title {
-      text-align: center;
-      font-weight: bold;
-      font-size: 20px;
-      margin-top: 1rem;
-      text-decoration: underline;
-      text-decoration-thickness: 2px;
-      text-underline-offset: 4px;
-      color: #2c3e50;
-      letter-spacing: 1px;
-    }
-
-    /* Body - Medications */
-    .ord-body {
-      margin-top: 1.2rem;
-      font-size: 16px;
-      line-height: 1.8;
-      flex: 1;
-      overflow: auto;
-    }
-
-    .med-item {
-      margin-bottom: 0.8rem;
-    }
-
-    .med-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: 2rem;
-      margin-bottom: 0.2rem;
-    }
-
-    .med-name {
-      font-weight: 700;
-      font-size: 17px;
-      color: #2c3e50;
-      flex: 1;
-    }
-
-    .med-duration {
-      font-size: 15px;
-      color: #555;
-      font-weight: 500;
-      text-align: right;
-    }
-
-    .med-frequency {
-      margin-left: 1rem;
-      font-size: 15px;
-      color: #555;
-    }
-
-    /* Footer */
-    .ord-footer {
-      text-align: left;
-      margin-top: auto;
-      padding-top: 0.8rem;
-      min-height: 3cm;
-      font-size: 14px;
-      border-top: 1px dashed #2c3e50;
-      font-style: italic;
-      color: #555;
-    }
-
-    /* Print Optimization */
-    @media print {
-      body {
-        -webkit-print-color-adjust: exact;
-        print-color-adjust: exact;
-      }
-    }
-  </style>
-</head>
-<body>
-  <div class="ord-container">
-    <div class="ord-num">N° : ${consultationId}/${ordonnanceId}</div>
-
-    <div class="ord-header">
-      <div class="ord-header-top">
-        <div class="ord-left">
-          <strong>${cab.doctorName}</strong><br>
-          ${cab.specialty}<br>
-          <strong>Adresse :</strong> ${cab.address}<br>
-          ${cab.city}
-        </div>
-        
-        <div class="ord-center">
-          <img src="${cab.imageUrl}" alt="Logo Cabinet Médical" onerror="this.src='/uploads/image.PNG'; this.onerror=null;">
-        </div>
-
-        <div class="ord-right">
-          <strong>${cab.doctorNameAr}</strong><br>
-          ${cab.specialtyAr}<br>
-          <strong>العنوان :</strong> ${cab.addressAr}<br>
-          ${cab.cityAr}
-        </div>
-      </div>
-      
-      <div class="ord-phone">
-        <strong>Tél :</strong> ${cab.phones}
-      </div>
-    </div>
-
-    <div class="ord-patient">
-      <span><strong>Nom :</strong> ${nom}</span>
-      <span><strong>Prénom :</strong> ${prenom}</span>
-      <span><strong>Âge :</strong> ${age}</span>
-      <span><strong>Le :</strong> ${new Date().toLocaleDateString(
-        "fr-FR",
-      )}</span>
-    </div>
-
-    <div class="ord-title">ORDONNANCE</div>
-
-    <div class="ord-body">${medListHtml}</div>
-
-    <div class="ord-footer">
-      Signature et cachet du médecin
-    </div>
-  </div>
-</body>
-</html>
-`;
-
-  printWindow.loadURL(
-    "data:text/html;charset=utf-8," + encodeURIComponent(printHtml),
+  const cab = getElectronCabinet(cabinet);
+  runElectronPrint(
+    buildOrdonnanceHtml(
+      { nom, prenom, age, consultationId, ordonnanceId, items },
+      cab,
+      { autoPrint: false },
+    ),
+    "Ordonnance",
   );
-
-  printWindow.webContents.on("did-finish-load", () => {
-    setTimeout(() => {
-      printWindow.webContents.print(
-        {
-          silent: false,
-          printBackground: true,
-          margins: { marginType: "none" },
-          pageSize: { name: "A4", width: 297000, height: 210000 },
-          landscape: true,
-        },
-        (success, failureReason) => {
-          if (success) console.log("🖨️ Ordonnance printed successfully");
-          else console.error("❌ Print failed:", failureReason);
-          printWindow.close();
-        },
-      );
-    }, 500);
-  });
 });
 
-ipcMain.on("printBilan", async (event, data) => {
+ipcMain.on("printBilan", (event, data = {}) => {
   const {
-    id,
     nom,
     prenom,
     age,
@@ -818,264 +589,17 @@ ipcMain.on("printBilan", async (event, data) => {
     items = [],
     cabinet = {},
   } = data;
-
-  const cab = await getElectronCabinet(cabinet);
-
-  // 🪟 Allow file access for local image
-  const printWindow = new BrowserWindow({
-    show: true,
-    width: 1000,
-    height: 700,
-    autoHideMenuBar: true,
-    webPreferences: {
-      nodeIntegration: false,
-      contextIsolation: true,
-      webSecurity: false,
-      allowFileAccessFromFileURLs: true,
-      allowUniversalAccessFromFileURLs: true,
-    },
-  });
-
-  // 🔬 Generate list of analyses/exams
-  const bilanListHtml = items
-    .map(
-      (b, i) => `
-        <div class="bilan-item">
-          <div class="bilan-name">${i + 1}. ${b.nom || b.name || ""}</div>
-        </div>`,
-    )
-    .join("");
-
-  // 🧾 HTML Layout (identical to Ordonnance)
-  const printHtml = `
-<!DOCTYPE html>
-<html lang="fr">
-<head>
-  <meta charset="UTF-8">
-  <style>
-    @page { size: A4 landscape; margin: 0; }
-
-    body {
-      margin: 0;
-      padding: 0;
-      width: 29.7cm;
-      height: 21cm;
-      background: white;
-      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-      color: #1a1a1a;
-    }
-
-    .ord-container {
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 14.85cm;
-      height: 21cm;
-      border: 2px solid #2c3e50;
-      padding: 0.8cm;
-      display: flex;
-      flex-direction: column;
-    }
-
-    .ord-num {
-      position: absolute;
-      top: 0.2cm;
-      right: 0.2cm;
-      font-size: 12px;
-      color: #555;
-      font-weight: 600;
-      background: white;
-      padding: 0.3rem 0.5rem;
-      border-radius: 4px;
-    }
-
-    /* HEADER */
-    .ord-header {
-      border-bottom: 2px solid #2c3e50;
-      padding-bottom: 0.5rem;
-    }
-
-    .ord-header-top {
-      display: flex;
-      justify-content: space-between;
-      align-items: flex-start;
-      gap: 1rem;
-    }
-
-    .ord-left, .ord-right {
-      flex: 1;
-      font-size: 13px;
-      line-height: 1.5;
-    }
-
-    .ord-center {
-      flex-shrink: 0;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      max-width: 80px;
-    }
-
-    .ord-center img {
-      max-width: 100%;
-      max-height: 80px;
-      object-fit: contain;
-    }
-
-    .ord-right {
-      text-align: right;
-      direction: rtl;
-    }
-
-    .ord-left strong, .ord-right strong {
-      color: #2c3e50;
-      font-size: 14px;
-    }
-
-    .ord-phone {
-      text-align: center;
-      margin-top: 0.5rem;
-      font-weight: 500;
-      font-size: 13px;
-    }
-
-    /* PATIENT INFO */
-    .ord-patient {
-      margin-top: 0.8rem;
-      display: flex;
-      justify-content: space-between;
-      flex-wrap: wrap;
-      gap: 0.5rem;
-      font-size: 14px;
-      padding: 0.5rem;
-    }
-
-    .ord-title {
-      text-align: center;
-      font-weight: bold;
-      font-size: 20px;
-      margin-top: 1rem;
-      text-decoration: underline;
-      color: #2c3e50;
-    }
-
-    /* BODY */
-    .ord-body {
-      margin-top: 1.2rem;
-      font-size: 16px;
-      line-height: 1.8;
-      flex: 1;
-    }
-
-    .bilan-item {
-      margin-bottom: 1.2rem;
-      font-size: 17px;
-    }
-
-    .bilan-name {
-      font-weight: 600;
-      color: #2c3e50;
-    }
-
-    /* FOOTER */
-    .ord-footer {
-      text-align: left;
-      margin-top: auto;
-      border-top: 1px dashed #2c3e50;
-      padding-top: 0.8rem;
-      font-style: italic;
-      font-size: 14px;
-      color: #555;
-      min-height: 3cm;
-    }
-
-    @media print {
-      body {
-        -webkit-print-color-adjust: exact;
-        print-color-adjust: exact;
-      }
-    }
-  </style>
-</head>
-
-<body>
-  <div class="ord-container">
-    <div class="ord-num">N° de Bilan : ${consultationId}/${bilanId}</div>
-
-    <div class="ord-header">
-      <div class="ord-header-top">
-        <div class="ord-left">
-          <strong>${cab.doctorName}</strong><br>
-          ${cab.specialty}<br>
-          <strong>Adresse :</strong> ${cab.address}<br>
-          ${cab.city}
-        </div>
-
-        <div class="ord-center">
-          <img src="${cab.imageUrl}" alt="Logo Cabinet Médical" onerror="this.src='/uploads/image.PNG'; this.onerror=null;">
-        </div>
-
-        <div class="ord-right">
-          <strong>${cab.doctorNameAr}</strong><br>
-          ${cab.specialtyAr}<br>
-          <strong>العنوان :</strong> ${cab.addressAr}<br>
-          ${cab.cityAr}
-        </div>
-      </div>
-
-      <div class="ord-phone">
-        <strong>Tél :</strong> ${cab.phones}
-      </div>
-    </div>
-
-    <div class="ord-patient">
-      <span><strong>Nom :</strong> ${nom}</span>
-      <span><strong>Prénom :</strong> ${prenom}</span>
-      <span><strong>Âge :</strong> ${age}</span>
-      <span><strong>Le :</strong> ${new Date().toLocaleDateString(
-        "fr-FR",
-      )}</span>
-    </div>
-
-    <div class="ord-title">BILAN</div>
-
-    <div class="ord-body">${bilanListHtml}</div>
-
-    <div class="ord-footer">Signature et cachet du médecin</div>
-  </div>
-</body>
-</html>
-`;
-
-  // ✅ Load content
-  printWindow.loadURL(
-    "data:text/html;charset=utf-8," + encodeURIComponent(printHtml),
+  const cab = getElectronCabinet(cabinet);
+  runElectronPrint(
+    buildBilanHtml({ nom, prenom, age, consultationId, bilanId, items }, cab, {
+      autoPrint: false,
+    }),
+    "Bilan",
   );
-
-  // 🖨 Print setup
-  printWindow.webContents.on("did-finish-load", () => {
-    setTimeout(() => {
-      printWindow.webContents.print(
-        {
-          silent: false,
-          printBackground: true,
-          margins: { marginType: "none" },
-          pageSize: { name: "A4", width: 297000, height: 210000 },
-          landscape: true,
-        },
-        (success, failureReason) => {
-          if (success) console.log("🖨️ Bilan printed successfully");
-          else console.error("❌ Print failed:", failureReason);
-          printWindow.close();
-        },
-      );
-    }, 500);
-  });
 });
 
-ipcMain.on("printJustification", async (event, data) => {
+ipcMain.on("printJustification", (event, data = {}) => {
   const {
-    id,
     nom,
     prenom,
     age,
@@ -1084,258 +608,15 @@ ipcMain.on("printJustification", async (event, data) => {
     texte = "",
     cabinet = {},
   } = data;
-
-  const cab = await getElectronCabinet(cabinet);
-
-  const printWindow = new BrowserWindow({
-    show: true,
-    width: 1000,
-    height: 700,
-    autoHideMenuBar: true,
-    webPreferences: {
-      nodeIntegration: false,
-      contextIsolation: true,
-      webSecurity: false,
-      allowFileAccessFromFileURLs: true,
-      allowUniversalAccessFromFileURLs: true,
-    },
-  });
-
-  const formattedText = (texte || "")
-    .split("\n")
-    .map((line) => line.trim())
-    .filter((line) => line.length > 0)
-    .map((p) => `<p style="margin-bottom: 0.8rem; text-indent: 1rem;">${p}</p>`)
-    .join("");
-
-  const printHtml = `
-<!DOCTYPE html>
-<html lang="fr">
-<head>
-  <meta charset="UTF-8">
-  <style>
-    @page { size: A4 landscape; margin: 0; }
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-
-    body {
-      width: 29.7cm;
-      height: 21cm;
-      background: white;
-      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-      color: #1a1a1a;
-    }
-
-    .ord-container {
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 14.85cm;
-      height: 21cm;
-      border: 2px solid #2c3e50;
-      padding: 0.8cm;
-      display: flex;
-      flex-direction: column;
-    }
-
-    .ord-num {
-      position: absolute;
-      top: 0.2cm;
-      right: 0.2cm;
-      font-size: 12px;
-      color: #555;
-      font-weight: 600;
-      background: white;
-      padding: 0.3rem 0.5rem;
-      border-radius: 4px;
-    }
-
-    /* HEADER */
-    .ord-header {
-      border-bottom: 2px solid #2c3e50;
-      padding-bottom: 0.5rem;
-    }
-
-    .ord-header-top {
-      display: flex;
-      justify-content: space-between;
-      align-items: flex-start;
-      gap: 1rem;
-    }
-
-    .ord-left, .ord-right {
-      flex: 1;
-      font-size: 13px;
-      line-height: 1.5;
-    }
-
-    .ord-center {
-      flex-shrink: 0;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      max-width: 80px;
-    }
-
-    .ord-center img {
-      max-width: 100%;
-      max-height: 80px;
-      object-fit: contain;
-    }
-
-    .ord-right {
-      text-align: right;
-      direction: rtl;
-    }
-
-    .ord-left strong, .ord-right strong {
-      color: #2c3e50;
-      font-size: 14px;
-    }
-
-    .ord-phone {
-      text-align: center;
-      margin-top: 0.5rem;
-      font-weight: 500;
-      font-size: 13px;
-    }
-
-    /* PATIENT INFO */
-    .ord-patient {
-      margin-top: 0.8rem;
-      display: flex;
-      justify-content: space-between;
-      flex-wrap: wrap;
-      gap: 0.5rem;
-      font-size: 14px;
-      padding: 0.5rem;
-    }
-
-    .ord-title {
-      text-align: center;
-      font-weight: bold;
-      font-size: 18px;
-      margin-top: 0.9rem;
-      text-decoration: underline;
-      text-decoration-thickness: 2px;
-      text-underline-offset: 4px;
-      color: #2c3e50;
-      letter-spacing: 1px;
-      text-transform: uppercase;
-    }
-
-    /* BODY */
-    .ord-body {
-      margin-top: 1.2rem;
-      font-size: 15px;
-      line-height: 1.8;
-      flex: 1;
-      overflow: auto;
-      text-align: justify;
-    }
-
-    .ord-meta {
-      margin-top: 0.5rem;
-      font-size: 14px;
-      color: #2c3e50;
-      font-weight: 600;
-    }
-
-    /* FOOTER */
-    .ord-footer {
-      text-align: left;
-      margin-top: auto;
-      border-top: 1px dashed #2c3e50;
-      padding-top: 0.8rem;
-      font-style: italic;
-      font-size: 14px;
-      color: #555;
-      min-height: 3cm;
-    }
-
-    @media print {
-      body {
-        -webkit-print-color-adjust: exact;
-        print-color-adjust: exact;
-      }
-    }
-  </style>
-</head>
-
-<body>
-  <div class="ord-container">
-    <div class="ord-num">N° : ${consultationId || "-"}/${justificationId || "-"}</div>
-
-    <div class="ord-header">
-      <div class="ord-header-top">
-        <div class="ord-left">
-          <strong>${cab.doctorName}</strong><br>
-          ${cab.specialty}<br>
-          <strong>Adresse :</strong> ${cab.address}<br>
-          ${cab.city}
-        </div>
-
-        <div class="ord-center">
-          <img src="${cab.imageUrl}" alt="Logo Cabinet Médical" onerror="this.src='/uploads/image.PNG'; this.onerror=null;">
-        </div>
-
-        <div class="ord-right">
-          <strong>${cab.doctorNameAr}</strong><br>
-          ${cab.specialtyAr}<br>
-          <strong>العنوان :</strong> ${cab.addressAr}<br>
-          ${cab.cityAr}
-        </div>
-      </div>
-
-      <div class="ord-phone">
-        <strong>Tél :</strong> ${cab.phones}
-      </div>
-    </div>
-
-    <div class="ord-patient">
-      <span><strong>Nom :</strong> ${nom}</span>
-      <span><strong>Prénom :</strong> ${prenom}</span>
-      <span><strong>Âge :</strong> ${age}</span>
-      <span><strong>Le :</strong> ${new Date().toLocaleDateString(
-        "fr-FR",
-      )}</span>
-    </div>
-
-    <div class="ord-title">JUSTIFICATION MÉDICALE</div>
-
-    <div class="ord-body">
-      ${formattedText || "<p>Je soussigné(e), Docteur en médecine, certifie avoir examiné ce jour l'enfant mentionné ci-dessus et que son état de santé justifie ce certificat médical.</p>"}
-    </div>
-
-    <div class="ord-footer">Signature et cachet du médecin</div>
-  </div>
-</body>
-</html>
-`;
-
-  // ✅ Load content
-  printWindow.loadURL(
-    "data:text/html;charset=utf-8," + encodeURIComponent(printHtml),
+  const cab = getElectronCabinet(cabinet);
+  runElectronPrint(
+    buildJustificationHtml(
+      { nom, prenom, age, consultationId, justificationId, texte },
+      cab,
+      { autoPrint: false },
+    ),
+    "Justification",
   );
-
-  // 🖨 Print setup
-  printWindow.webContents.on("did-finish-load", () => {
-    setTimeout(() => {
-      printWindow.webContents.print(
-        {
-          silent: false,
-          printBackground: true,
-          margins: { marginType: "none" },
-          pageSize: { name: "A4", width: 297000, height: 210000 },
-          landscape: true,
-        },
-        (success, failureReason) => {
-          if (success) console.log("🖨️ Justification printed successfully");
-          else console.error("❌ Print failed:", failureReason);
-          printWindow.close();
-        },
-      );
-    }, 500);
-  });
 });
 
 ipcMain.handle("backup-database", async () => {

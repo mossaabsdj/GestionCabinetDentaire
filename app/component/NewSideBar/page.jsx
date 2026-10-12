@@ -76,7 +76,9 @@ const Sidebar = ({
                   height={45}
                 />
                 <div>
-                  <h1 className="text-xl font-bold">{userInfo?.name || "Cabinet Dentaire"}</h1>
+                  <h1 className="text-xl font-bold">
+                    {userInfo?.name || "Cabinet Dentaire"}
+                  </h1>
                   <p className="text-xs text-[var(--color-300)]">
                     Health System
                   </p>
@@ -259,7 +261,10 @@ export default function App() {
         onNavigate={handleNavigate}
         handleparam={handleParam}
         userInfo={{
-          name: cabinetInfo?.title || cabinetInfo?.cabinetName || "Cabinet Dentaire",
+          name:
+            cabinetInfo?.title ||
+            cabinetInfo?.cabinetName ||
+            "Cabinet Dentaire",
           role: cabinetInfo?.specialty || "Chirurgien Dentiste",
         }}
       />
