@@ -558,65 +558,109 @@ function runElectronPrint(html, label) {
   });
 }
 
-ipcMain.on("printOrdonnance", (event, data = {}) => {
-  const {
-    nom,
-    prenom,
-    age,
-    consultationId,
-    ordonnanceId,
-    items = [],
-    cabinet = {},
-  } = data;
-  const cab = getElectronCabinet(cabinet);
-  runElectronPrint(
-    buildOrdonnanceHtml(
-      { nom, prenom, age, consultationId, ordonnanceId, items },
+ipcMain.on("printOrdonnance", async (event, data = {}) => {
+  try {
+    const {
+      nom = "",
+      prenom = "",
+      age = "",
+      consultationId,
+      ordonnanceId,
+      items = [],
+      cabinet = {},
+    } = data;
+
+    const cab = await getElectronCabinet(cabinet);
+
+    const html = buildOrdonnanceHtml(
+      {
+        nom,
+        prenom,
+        age,
+        consultationId,
+        ordonnanceId,
+        items,
+      },
       cab,
       { autoPrint: false },
-    ),
-    "Ordonnance",
-  );
+    );
+
+    runElectronPrint(html, "Ordonnance");
+  } catch (error) {
+    console.error("Erreur impression ordonnance:", error);
+
+    event.sender.send("printOrdonnanceError", {
+      message: "Impossible de préparer l'ordonnance pour impression.",
+    });
+  }
 });
 
-ipcMain.on("printBilan", (event, data = {}) => {
-  const {
-    nom,
-    prenom,
-    age,
-    consultationId,
-    bilanId,
-    items = [],
-    cabinet = {},
-  } = data;
-  const cab = getElectronCabinet(cabinet);
-  runElectronPrint(
-    buildBilanHtml({ nom, prenom, age, consultationId, bilanId, items }, cab, {
-      autoPrint: false,
-    }),
-    "Bilan",
-  );
-});
 
-ipcMain.on("printJustification", (event, data = {}) => {
-  const {
-    nom,
-    prenom,
-    age,
-    consultationId,
-    justificationId,
-    texte = "",
-    cabinet = {},
-  } = data;
-  const cab = getElectronCabinet(cabinet);
-  runElectronPrint(
-    buildJustificationHtml(
-      { nom, prenom, age, consultationId, justificationId, texte },
+ipcMain.on("printBilan", async (event, data = {}) => {
+  try {
+    const {
+      nom = "",
+      prenom = "",
+      age = "",
+      consultationId,
+      bilanId,
+      items = [],
+      cabinet = {},
+    } = data;
+
+    const cab = await getElectronCabinet(cabinet);
+
+    const html = buildBilanHtml(
+      { nom, prenom, age, consultationId, bilanId, items },
       cab,
       { autoPrint: false },
-    ),
-    "Justification",
-  );
+    );
+
+    runElectronPrint(html, "Bilan");
+  } catch (error) {
+    console.error("Erreur impression bilan:", error);
+
+    event.sender.send("printBilanError", {
+      message: "Impossible de préparer le bilan pour impression.",
+    });
+  }
+});
+
+ipcMain.on("printJustification", async (event, data = {}) => {
+  try {
+    const {
+      nom = "",
+      prenom = "",
+      age = "",
+      consultationId,
+      justificationId,
+      texte = "",
+      cabinet = {},
+    } = data;
+
+    const cab = await getElectronCabinet(cabinet);
+
+    const html = buildJustificationHtml(
+      {
+        nom,
+        prenom,
+        age,
+        consultationId,
+        justificationId,
+        texte,
+      },
+      cab,
+      { autoPrint: false },
+    );
+
+    runElectronPrint(html, "Justification");
+  } catch (error) {
+    console.error("Erreur impression justification:", error);
+
+    event.sender.send("printJustificationError", {
+      message: "Impossible de préparer la justification pour impression.",
+    });
+  }
 });
 
 ipcMain.handle("backup-database", async () => {
