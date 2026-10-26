@@ -20,7 +20,11 @@ import {
   Loader2,
   IdCard,
   Contact,
+  Lock,
+  ShieldCheck,
+  KeyRound,
 } from "lucide-react";
+import Swal from "sweetalert2";
 import {
   Card,
   CardHeader,
@@ -325,7 +329,7 @@ export default function ParametrePage() {
     }
   };
 
-  // === Handle Backup (Full App JSON Export) ===
+    // === Handle Backup (Full App Encrypted Export using .env Static Secret) ===
   const handleBackup = async () => {
     try {
       setLoadingBackup(true);
@@ -336,14 +340,18 @@ export default function ParametrePage() {
         if (result?.success) {
           showAlert(
             "success",
-            "Sauvegarde exportée !",
-            `La base de données a été exportée au format JSON avec succès.`,
+            "Sauvegarde chiffrée avec succès !",
+            "Toutes les données ont été chiffrées en AES-256-GCM avec la clé secrète du fichier .env et exportées en toute sécurité.",
           );
         } else {
           throw new Error(result?.message || "Échec de l'exportation.");
         }
       } else {
-        const res = await fetch("/api/backup");
+        const res = await fetch("/api/backup", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({}),
+        });
         if (!res.ok) {
           const errData = await res.json().catch(() => ({}));
           throw new Error(
@@ -355,15 +363,15 @@ export default function ParametrePage() {
         const a = document.createElement("a");
         a.href = url;
         const timestamp = new Date().toISOString().split("T")[0];
-        a.download = `backup_amel_${timestamp}.json`;
+        a.download = `backup_dentaire_${timestamp}.cbak`;
         document.body.appendChild(a);
         a.click();
         a.remove();
         window.URL.revokeObjectURL(url);
         showAlert(
           "success",
-          "Exportation réussie !",
-          "Le fichier de sauvegarde JSON de l'application a été téléchargé.",
+          "Sauvegarde chiffrée exportée !",
+          "Le fichier de sauvegarde chiffré (AES-256-GCM) a été téléchargé.",
         );
       }
     } catch (error) {
@@ -378,18 +386,65 @@ export default function ParametrePage() {
     }
   };
 
-  // === Handle Restore Button Click ===
+  // === Handle Restore Button Click (Automatic Decryption using .env Static Secret with Fallback Prompt) ===
   const handleRestoreClick = async () => {
     try {
-      if (typeof window !== "undefined" && window?.electron?.restore) {
+      if (typeof window !== "undefined" && window?.electron?.selectBackupFile) {
+        const selection = await window.electron.selectBackupFile();
+        if (selection?.canceled || !selection?.filePath) return;
+
+        if (selection.isValid === false) {
+          throw new Error(selection.error || "Ce fichier n'est pas un fichier de sauvegarde valide.");
+        }
+
         setLoadingRestore(true);
-        const result = await window.electron.restore();
+
+        // Attempt automatic restore first using the static secret from .env
+        let result = await window.electron.restore({
+          filePath: selection.filePath,
+        });
+
+        // If decryption failed due to wrong password, prompt user for password as fallback
+        if (
+          !result?.success &&
+          result?.message &&
+          (result.message.includes("Mot de passe incorrect") ||
+            result.message.includes("déchiffrer") ||
+            result.message.includes("altéré"))
+        ) {
+          setLoadingRestore(false);
+          const { value: customPwd } = await Swal.fire({
+            title: "Mot de passe requis",
+            text: "Cette sauvegarde a été chiffrée avec un mot de passe différent de celui du fichier .env. Veuillez saisir le mot de passe de cette sauvegarde :",
+            input: "password",
+            inputPlaceholder: "Mot de passe de la sauvegarde",
+            showCancelButton: true,
+            confirmButtonText: "Déchiffrer et restaurer",
+            cancelButtonText: "Annuler",
+            confirmButtonColor: "#059669",
+            cancelButtonColor: "#6b7280",
+            inputValidator: (val) => {
+              if (!val) {
+                return "Le mot de passe est obligatoire.";
+              }
+            },
+          });
+
+          if (!customPwd) return;
+
+          setLoadingRestore(true);
+          result = await window.electron.restore({
+            filePath: selection.filePath,
+            password: customPwd,
+          });
+        }
+
         if (result?.canceled) return;
         if (result?.success) {
           showAlert(
             "success",
             "Restauration réussie !",
-            "Toutes les données ont été restaurées avec succès depuis le fichier JSON.",
+            "Toutes les données ont été déchiffrées, validées et restaurées avec succès.",
           );
         } else {
           throw new Error(result?.message || "Échec de l'importation.");
@@ -412,7 +467,7 @@ export default function ParametrePage() {
     }
   };
 
-  // === Handle File Input Selection in Browser (JSON) ===
+  // === Handle File Input Selection in Browser ===
   const handleFileChange = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -423,12 +478,51 @@ export default function ParametrePage() {
       const formData = new FormData();
       formData.append("file", file);
 
-      const res = await fetch("/api/restore", {
+      let res = await fetch("/api/restore", {
         method: "POST",
         body: formData,
       });
 
-      const data = await res.json();
+      let data = await res.json().catch(() => ({}));
+
+      // If server returned wrong password error, prompt user for password
+      if (
+        !res.ok &&
+        data.error &&
+        (data.error.includes("Mot de passe incorrect") || data.error.includes("déchiffrer"))
+      ) {
+        setLoadingRestore(false);
+        const { value: customPwd } = await Swal.fire({
+          title: "Mot de passe requis",
+          text: "Cette sauvegarde a été chiffrée avec un mot de passe différent de celui du fichier .env. Veuillez saisir le mot de passe :",
+          input: "password",
+          inputPlaceholder: "Mot de passe de la sauvegarde",
+          showCancelButton: true,
+          confirmButtonText: "Déchiffrer et restaurer",
+          cancelButtonText: "Annuler",
+          confirmButtonColor: "#059669",
+          cancelButtonColor: "#6b7280",
+          inputValidator: (val) => {
+            if (!val) {
+              return "Le mot de passe est obligatoire.";
+            }
+          },
+        });
+
+        if (!customPwd) return;
+
+        setLoadingRestore(true);
+        const retryForm = new FormData();
+        retryForm.append("file", file);
+        retryForm.append("password", customPwd);
+
+        res = await fetch("/api/restore", {
+          method: "POST",
+          body: retryForm,
+        });
+        data = await res.json().catch(() => ({}));
+      }
+
       if (!res.ok) {
         throw new Error(data.error || "Erreur lors de la restauration.");
       }
@@ -436,7 +530,7 @@ export default function ParametrePage() {
       showAlert(
         "success",
         "Restauration réussie !",
-        "Toutes les données de l'application ont été restaurées avec succès.",
+        "Toutes les données ont été déchiffrées et restaurées avec succès.",
       );
     } catch (error) {
       console.error(error);
@@ -532,7 +626,7 @@ export default function ParametrePage() {
         type="file"
         ref={fileInputRef}
         onChange={handleFileChange}
-        accept=".json"
+        accept=".cbak,.enc,.json"
         className="hidden"
       />
 
@@ -552,8 +646,7 @@ export default function ParametrePage() {
               Paramètres du Cabinet & Application
             </h1>
             <p className="text-sm text-gray-600">
-              Personnalisation de l'en-tête, thème, sauvegarde et restauration
-              globale en JSON
+              Personnalisation de l'en-tête, thème, sauvegarde sécurisée (AES-256-GCM) et restauration
             </p>
           </div>
         </div>
@@ -891,15 +984,14 @@ export default function ParametrePage() {
             <Card className="border border-gray-200 shadow-sm hover:shadow-md transition-shadow bg-white">
               <CardHeader className="flex items-center gap-3">
                 <div className="p-3 bg-blue-100 rounded-xl">
-                  <DownloadCloud className="w-6 h-6 text-blue-600" />
+                  <ShieldCheck className="w-6 h-6 text-blue-600" />
                 </div>
                 <div>
                   <CardTitle className="text-lg font-semibold text-gray-900">
-                    Exporter la base de données
+                    Sauvegarde sécurisée (AES-256-GCM)
                   </CardTitle>
                   <CardDescription className="text-sm text-gray-600">
-                    Téléchargez une sauvegarde complète de toutes les données au
-                    format JSON
+                    Exportez une sauvegarde complète chiffrée automatiquement avec la clé secrète configurée dans le fichier .env.
                   </CardDescription>
                 </div>
               </CardHeader>
@@ -913,12 +1005,12 @@ export default function ParametrePage() {
                   {loadingBackup ? (
                     <>
                       <Loader2 className="w-4 h-4 animate-spin" />
-                      Exportation en cours...
+                      Chiffrement & Exportation...
                     </>
                   ) : (
                     <>
-                      <DownloadCloud className="w-4 h-4" />
-                      Exporter en JSON
+                      <ShieldCheck className="w-4 h-4" />
+                      Exporter la sauvegarde
                     </>
                   )}
                 </button>
@@ -928,15 +1020,14 @@ export default function ParametrePage() {
             <Card className="border border-gray-200 shadow-sm hover:shadow-md transition-shadow bg-white">
               <CardHeader className="flex items-center gap-3">
                 <div className="p-3 bg-emerald-100 rounded-xl">
-                  <UploadCloud className="w-6 h-6 text-emerald-600" />
+                  <KeyRound className="w-6 h-6 text-emerald-600" />
                 </div>
                 <div>
                   <CardTitle className="text-lg font-semibold text-gray-900">
-                    Importer une sauvegarde
+                    Restaurer une sauvegarde
                   </CardTitle>
                   <CardDescription className="text-sm text-gray-600">
-                    Restaurez vos données depuis un fichier de sauvegarde
-                    (.json)
+                    Restaurez vos données depuis un fichier sécurisé (.cbak, .enc, .json) avec déchiffrement automatique via la clé secrète du fichier .env.
                   </CardDescription>
                 </div>
               </CardHeader>
@@ -950,12 +1041,12 @@ export default function ParametrePage() {
                   {loadingRestore ? (
                     <>
                       <Loader2 className="w-4 h-4 animate-spin" />
-                      Restauration en cours...
+                      Déchiffrement & Restauration...
                     </>
                   ) : (
                     <>
                       <UploadCloud className="w-4 h-4" />
-                      Importer un fichier JSON
+                      Restaurer une sauvegarde
                     </>
                   )}
                 </button>

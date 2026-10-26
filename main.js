@@ -5,7 +5,7 @@ const { exec } = require("child_process");
 const { shell } = require("electron");
 const { Menu } = require("electron");
 const { backupDatabase } = require("./backup");
-const { restoreDatabase } = require("./restore");
+const { restoreDatabase, inspectBackupFile } = require("./restore");
 let prisma;
 try {
   const { PrismaClient } = require("./app/generated/prisma");
@@ -663,12 +663,17 @@ ipcMain.on("printJustification", async (event, data = {}) => {
   }
 });
 
-ipcMain.handle("backup-database", async () => {
+ipcMain.handle("backup-database", async (event, options = {}) => {
+  const password = typeof options === "string" ? options : options?.password;
+
   const timestamp = new Date().toISOString().slice(0, 10);
   const { canceled, filePath } = await dialog.showSaveDialog({
-    title: "Exporter la base de données (JSON)",
-    defaultPath: `backup_amel_${timestamp}.json`,
-    filters: [{ name: "Fichiers JSON", extensions: ["json"] }],
+    title: "Exporter la base de données sécurisée",
+    defaultPath: `backup_dentaire_${timestamp}.cbak`,
+    filters: [
+      { name: "Sauvegarde sécurisée (*.cbak, *.enc, *.json)", extensions: ["cbak", "enc", "json"] },
+      { name: "Tous les fichiers", extensions: ["*"] },
+    ],
   });
 
   if (canceled || !filePath) {
@@ -676,36 +681,67 @@ ipcMain.handle("backup-database", async () => {
   }
 
   try {
-    const result = await backupDatabase(filePath);
+    const result = await backupDatabase(filePath, password);
     return {
       success: true,
       filePath: result.filePath,
-      message: "Base de données exportée avec succès.",
+      message: "Base de données exportée et chiffrée avec succès.",
     };
   } catch (err) {
     return { success: false, message: err.message };
   }
 });
 
-ipcMain.handle("restore-database", async () => {
-  // Let the user select a JSON backup file
+ipcMain.handle("select-backup-file", async () => {
   const { canceled, filePaths } = await dialog.showOpenDialog({
-    title: "Choisir un fichier de sauvegarde (JSON)",
-    filters: [{ name: "Fichiers JSON", extensions: ["json"] }],
+    title: "Choisir un fichier de sauvegarde",
+    filters: [
+      { name: "Sauvegarde sécurisée (*.cbak, *.enc, *.json)", extensions: ["cbak", "enc", "json"] },
+      { name: "Tous les fichiers", extensions: ["*"] },
+    ],
     properties: ["openFile"],
   });
 
-  if (canceled || filePaths.length === 0)
-    return {
-      canceled: true,
-      success: false,
-      message: "Aucun fichier sélectionné",
-    };
+  if (canceled || !filePaths || filePaths.length === 0) {
+    return { canceled: true };
+  }
 
   const filePath = filePaths[0];
-  console.log("🗂 Selected backup file:", filePath);
+  const inspection = inspectBackupFile(filePath);
+  return {
+    canceled: false,
+    filePath,
+    ...inspection,
+  };
+});
+
+ipcMain.handle("restore-database", async (event, options = {}) => {
+  let filePath = typeof options === "string" ? null : options?.filePath;
+  let password = typeof options === "string" ? options : options?.password;
+
+  if (!filePath) {
+    const { canceled, filePaths } = await dialog.showOpenDialog({
+      title: "Choisir un fichier de sauvegarde",
+      filters: [
+        { name: "Sauvegarde sécurisée (*.cbak, *.enc, *.json)", extensions: ["cbak", "enc", "json"] },
+        { name: "Tous les fichiers", extensions: ["*"] },
+      ],
+      properties: ["openFile"],
+    });
+
+    if (canceled || !filePaths || filePaths.length === 0) {
+      return {
+        canceled: true,
+        success: false,
+        message: "Aucun fichier sélectionné",
+      };
+    }
+    filePath = filePaths[0];
+  }
+
+  console.log("🗂 Restoring backup file:", filePath);
   try {
-    const result = await restoreDatabase(filePath);
+    const result = await restoreDatabase(filePath, password);
     return {
       success: true,
       message: result.message || "Base de données restaurée avec succès.",

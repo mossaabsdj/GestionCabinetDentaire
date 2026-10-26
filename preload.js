@@ -8,9 +8,9 @@ contextBridge.exposeInMainWorld("electron", {
   printOrdonnance: (data) => ipcRenderer.send("printOrdonnance", data),
   printBilan: (data) => ipcRenderer.send("printBilan", data),
   printJustification: (data) => ipcRenderer.send("printJustification", data),
-  //backup: () => ipcRenderer.invoke("electron.backup"), // Expose the backup function
-  backup: () => ipcRenderer.invoke("backup-database"),
-  restore: () => ipcRenderer.invoke("restore-database"),
+  backup: (options) => ipcRenderer.invoke("backup-database", options),
+  restore: (options) => ipcRenderer.invoke("restore-database", options),
+  selectBackupFile: () => ipcRenderer.invoke("select-backup-file"),
   getCabinet: () => ipcRenderer.invoke("get-cabinet"),
   openFile: (filePath) => ipcRenderer.invoke("open-file", filePath),
   exit: () => ipcRenderer.send("exit"),

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { decryptBackup } from "@/lib/backup-crypto";
 
 export const dynamic = "force-dynamic";
 
@@ -118,13 +119,15 @@ async function syncAutoIncrementSequences(dbClient) {
 
 export async function POST(req) {
   try {
-    let parsedData = null;
+    let rawPayload = null;
+    let password = null;
 
     const contentType = req.headers.get("content-type") || "";
 
     if (contentType.includes("multipart/form-data")) {
       const formData = await req.formData();
       const file = formData.get("file");
+      password = formData.get("password");
 
       if (!file) {
         return NextResponse.json(
@@ -135,25 +138,53 @@ export async function POST(req) {
 
       const textContent = await file.text();
       try {
-        parsedData = JSON.parse(textContent);
+        rawPayload = JSON.parse(textContent);
       } catch {
         return NextResponse.json(
-          { error: "Le fichier sélectionné n'est pas un JSON valide." },
+          { error: "Le fichier sélectionné n'est pas un JSON valide ou est corrompu." },
           { status: 400 },
         );
       }
     } else {
-      parsedData = await req.json();
+      const body = await req.json();
+      if (body && body.envelope) {
+        rawPayload = body.envelope;
+        password = body.password;
+      } else {
+        rawPayload = body;
+        password = body?.password;
+      }
     }
 
-    if (!parsedData) {
+    if (!rawPayload) {
       return NextResponse.json(
         { error: "Données de sauvegarde invalides ou vides." },
         { status: 400 },
       );
     }
 
+    let parsedData = rawPayload;
+
+    // If payload is encrypted with CABINET_SECURE_BACKUP format, decrypt and validate
+    if (rawPayload.format === "CABINET_SECURE_BACKUP") {
+      try {
+        parsedData = decryptBackup(rawPayload, password, "dentaire");
+      } catch (decryptErr) {
+        return NextResponse.json(
+          { error: decryptErr.message || "Échec du déchiffrement de la sauvegarde." },
+          { status: 400 },
+        );
+      }
+    }
+
     const data = parsedData.data || parsedData;
+
+    if (!data || typeof data !== "object") {
+      return NextResponse.json(
+        { error: "Structure de données de sauvegarde invalide." },
+        { status: 400 },
+      );
+    }
 
     // Restore sequentially in proper FK order inside a transaction
     await prisma.$transaction(
