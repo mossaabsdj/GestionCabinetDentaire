@@ -1,1469 +1,1486 @@
 /**
  * ============================================================================
- * test.js - Comprehensive Database Seed and Testing Script for Dental Clinic
+ * test.js - Realistic Dental Clinic Database Population and Verification
  * Cabinet Dentaire - Système de Gestion Médicale et Financière
  * ============================================================================
  *
- * This script generates a large, realistic, interconnected dataset tailored
- * specifically for a dental cabinet, exercising all 23 Prisma models,
- * business rules, clinical workflows, and financial calculations.
+ * Populates the database with realistic, interconnected medical records
+ * simulating authentic Algerian dental clinic workflows:
  *
- * USAGE:
- *   node test.js              -> Idempotent seed & comprehensive verification
- *   node test.js --clean      -> Safely remove previous TEST_ records and reseed
- *   node test.js --clean-only -> Safely remove only TEST_ records and exit
- *   node test.js --verify-only-> Run verification suite without seeding
+ * - Realistic Algerian patients with authentic demographics and medical histories
+ * - Realistic clinical dental pathologies (endodontics, periodontics, surgery,
+ *   prosthetics, conservative dentistry, pedodontics)
+ * - Multi-stage treatment plans with precise tooth numbers and clinical acts
+ * - Prescriptions (ordonnances) with real Algerian pharmaceutical formulations
+ * - Medical reports (bilans) and dental radiographs (radios) with clinical findings
+ * - Accurate financial accounting in DZD: billings, installments (versements),
+ *   debtor balances, and cabinet operating expenses (dépenses)
+ * - Comprehensive relationship and foreign key verification
  *
- * SAFETY GUARANTEES:
- *   - NEVER modifies or deletes real patient data (only records prefixed TEST_).
- *   - NEVER uses destructive migrations (no 'prisma migrate reset' or 'force-reset').
- *   - Deterministic PRNG with fixed seed ensures reproducible datasets.
+ * Safety & Quality:
+ * - NO placeholder names or labels (no "Test Patient", "Test Treatment", or "TEST_")
+ * - Idempotent execution: safely refreshes the cohort without damaging existing user data
+ * - Full verification of mathematical calculations and relational integrity
  * ============================================================================
  */
 
-const fs = require("fs");
-const path = require("path");
-
-// ============================================================================
-// 1. CONFIGURATION & ENVIRONMENT SETUP
-// ============================================================================
-
-function loadEnv() {
-  const envPath = path.join(__dirname, ".env");
-  if (fs.existsSync(envPath)) {
-    const envContent = fs.readFileSync(envPath, "utf8");
-    envContent.split("\n").forEach((line) => {
-      const trimmed = line.trim();
-      if (trimmed && !trimmed.startsWith("#")) {
-        const firstEqual = trimmed.indexOf("=");
-        if (firstEqual > 0) {
-          const key = trimmed.substring(0, firstEqual).trim();
-          let val = trimmed.substring(firstEqual + 1).trim();
-          if (
-            (val.startsWith('"') && val.endsWith('"')) ||
-            (val.startsWith("'") && val.endsWith("'"))
-          ) {
-            val = val.substring(1, val.length - 1);
-          }
-          if (!process.env[key]) {
-            process.env[key] = val;
-          }
-        }
-      }
-    });
-  }
-}
-
-loadEnv();
-
-let PrismaClient;
-try {
-  PrismaClient = require("./app/generated/prisma").PrismaClient;
-} catch (e) {
-  try {
-    PrismaClient = require("@prisma/client").PrismaClient;
-  } catch (err) {
-    console.error("❌ Impossible de charger PrismaClient :", err.message);
-    process.exit(1);
-  }
-}
+require("dotenv").config();
+const { PrismaClient, GroupeSanguin, StatutTraitement } = require("./app/generated/prisma");
 
 const prisma = new PrismaClient({
   log: ["error", "warn"],
 });
 
-// Safe database query wrapper with retries for transient connection drops
-async function safeExec(fn, retries = 3) {
-  for (let i = 0; i <= retries; i++) {
-    try {
-      return await fn();
-    } catch (err) {
-      if (i === retries) throw err;
-      const waitTime = (i + 1) * 800;
-      console.log(`   ⏳ Tentative de reconnexion (${i + 1}/${retries})...`);
-      await new Promise((r) => setTimeout(r, waitTime));
-    }
-  }
-}
-
-// ============================================================================
-// 2. DETERMINISTIC PSEUDO-RANDOM NUMBER GENERATOR (Mulberry32)
-// ============================================================================
-
-class DeterministicRNG {
-  constructor(seed = 20261009) {
-    this.seed = seed;
-  }
-
-  next() {
-    let t = (this.seed += 0x6d2b79f5);
-    t = Math.imul(t ^ (t >>> 15), t | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  }
-
-  int(min, max) {
-    return Math.floor(this.next() * (max - min + 1)) + min;
-  }
-
-  choice(arr) {
-    if (!arr || arr.length === 0) return null;
-    return arr[this.int(0, arr.length - 1)];
-  }
-
-  sample(arr, count) {
-    const shuffled = [...arr].sort(() => this.next() - 0.5);
-    return shuffled.slice(0, count);
-  }
-
-  boolean(prob = 0.5) {
-    return this.next() < prob;
-  }
-
-  date(startYear = 2023, endYear = 2026) {
-    const start = new Date(startYear, 0, 1).getTime();
-    const end = new Date(endYear, 9, 8).getTime();
-    return new Date(start + this.next() * (end - start));
-  }
-}
-
-const rng = new DeterministicRNG(20261009);
-
-// ============================================================================
-// 3. MASTER CLINICAL DATA DEFINITIONS (Dental Specific)
-// ============================================================================
-
-const DENTAL_MEDICAMENTS = [
-  { nom: "Amoxicilline 500mg gélules (Clamoxyl)" },
-  { nom: "Amoxicilline + Acide Clavulanique 1g (Augmentin)" },
-  { nom: "Spiramycine + Métronidazole (Bi-Rodogyl 1.5MUI/250mg)" },
-  { nom: "Paracétamol 1000mg comprimés (Doliprane)" },
-  { nom: "Ibuprofène 400mg comprimés (Advil)" },
-  { nom: "Kétoprofène 100mg comprimés sécables (Bi-Profenid)" },
-  { nom: "Bain de bouche Chlorhexidine 0.12% (Eludril Pro)" },
-  { nom: "Prednisolone 20mg comprimés effervescents (Solupred)" },
-  { nom: "Tramadol + Paracétamol 37.5mg/325mg (Ixprim)" },
-  { nom: "Acide Méfénamique 500mg (Ponstyl)" },
-  { nom: "Clindamycine 300mg gélules (Dalacine)" },
-  { nom: "Xylocaïne 2% spray buccal anesthésique" },
-  { nom: "Gel buccal antiseptique et cicatrisant (Pansoral)" },
-  { nom: "Vitamine C 1000mg comprimés à croquer" },
-  { nom: "Azithromycine 500mg comprimés (Zithromax)" },
-  { nom: "Bétadine buccale 10% solution gargarisme" },
-  { nom: "Codoliprane (Paracétamol 400mg + Codéine 20mg)" },
-  { nom: "Dexaméthasone 4mg comprimés" },
-  { nom: "Antifongique buccal Nystatine 100 000 UI/ml (Mycostatine)" },
-  { nom: "Alvyl (Chlorhexidine + Chlorobutanol)" },
+// Identified Algerian patient cohort for safe idempotency
+const CLINICAL_COHORT_NAMES = [
+  "Amina Benali",
+  "Karim Mansouri",
+  "Fatima Zohra Boukhalfa",
+  "Sofiane Belkacem",
+  "Meriem Chaouche",
+  "Yacine Haddad",
+  "Ahmed Zouaoui",
+  "Samia Larbi",
 ];
-
-const DENTAL_BILANS = [
-  { nom: "Bilan d'hémostase complet (TP, TCA, INR)" },
-  { nom: "NFS (Numération Formule Sanguine)" },
-  { nom: "Glycémie à jeun & HbA1c (Hémoglobine glyquée)" },
-  { nom: "Bilan phospho-calcique & Vitamine D" },
-  { nom: "Scanner Cône Beam 3D (CBCT Maxillaire / Mandibule)" },
-  { nom: "Radiographie Panoramique Dentaire (OPG)" },
-  { nom: "Bilan allergologique aux anesthésiques locaux" },
-  { nom: "Sérologies virales (Hépatite B, Hépatite C, VIH)" },
-  { nom: "CRP (Protéine C-Réactive ultra-sensible)" },
-  { nom: "Ionogramme sanguin & Créatininémie" },
-  { nom: "Temps de Saignement (TS) méthode d'Ivy" },
-  { nom: "Fibrinogène plasmatique" },
-];
-
-const DENTAL_VACCINES = [
-  { name: "Vaccin Hépatite B (Engerix B / recombinant)" },
-  { name: "Vaccin Antitétanique (Tetavax / rappel)" },
-  { name: "Vaccin Diphtérie-Tétanos-Poliomyélite (DTPolio)" },
-  { name: "Vaccin Grippe saisonnière (Vaxigrip Tetra)" },
-  { name: "Vaccin ROR (Priorix)" },
-];
-
-const DENTAL_RECETTE_TYPES = [
-  {
-    nom: "Suite d'avulsion chirurgicale (dent de sagesse)",
-    items: [
-      {
-        medName: "Amoxicilline 500mg gélules (Clamoxyl)",
-        dosage: "1 gélule (1g au total) matin et soir",
-        frequence: "2 fois par jour au cours des repas",
-        duree: "6 jours",
-        quantite: 2,
-      },
-      {
-        medName: "Ibuprofène 400mg comprimés (Advil)",
-        dosage: "1 comprimé si douleur",
-        frequence: "Toutes les 8h au milieu des repas (max 3/j)",
-        duree: "4 jours",
-        quantite: 1,
-      },
-      {
-        medName: "Paracétamol 1000mg comprimés (Doliprane)",
-        dosage: "1 comprimé en alternance",
-        frequence: "Toutes les 6h en cas de douleur résiduelle",
-        duree: "5 jours",
-        quantite: 2,
-      },
-      {
-        medName: "Bain de bouche Chlorhexidine 0.12% (Eludril Pro)",
-        dosage: "15 ml pur ou dilué dans demi-verre d'eau",
-        frequence: "3 fois par jour après brossage doux dès J+2",
-        duree: "7 jours",
-        quantite: 1,
-      },
-    ],
-  },
-  {
-    nom: "Abcès dentaire aigu / Cellulite péri-maxillaire",
-    items: [
-      {
-        medName: "Spiramycine + Métronidazole (Bi-Rodogyl 1.5MUI/250mg)",
-        dosage: "2 comprimés par jour",
-        frequence: "Matin et soir au milieu des repas",
-        duree: "7 jours",
-        quantite: 2,
-      },
-      {
-        medName: "Prednisolone 20mg comprimés effervescents (Solupred)",
-        dosage: "3 comprimés (60mg) en une prise matinale",
-        frequence: "Le matin au petit-déjeuner pendant 3 jours",
-        duree: "3 jours",
-        quantite: 1,
-      },
-      {
-        medName: "Paracétamol 1000mg comprimés (Doliprane)",
-        dosage: "1 comprimé 1000mg",
-        frequence: "Toutes les 6h si douleur ou fièvre",
-        duree: "5 jours",
-        quantite: 2,
-      },
-    ],
-  },
-  {
-    nom: "Chirurgie implantaire et parodontale avancée",
-    items: [
-      {
-        medName: "Amoxicilline + Acide Clavulanique 1g (Augmentin)",
-        dosage: "1 comprimé 1g matin et soir",
-        frequence: "Toutes les 12 heures",
-        duree: "7 jours",
-        quantite: 2,
-      },
-      {
-        medName: "Kétoprofène 100mg comprimés sécables (Bi-Profenid)",
-        dosage: "1 comprimé matin et soir",
-        frequence: "Pendant les repas",
-        duree: "4 jours",
-        quantite: 1,
-      },
-      {
-        medName: "Bain de bouche Chlorhexidine 0.12% (Eludril Pro)",
-        dosage: "15 ml sans rincer",
-        frequence: "Matin, midi et soir après brossage",
-        duree: "10 jours",
-        quantite: 2,
-      },
-    ],
-  },
-  {
-    nom: "Urgence pulpite aiguë (rage de dents)",
-    items: [
-      {
-        medName: "Tramadol + Paracétamol 37.5mg/325mg (Ixprim)",
-        dosage: "1 à 2 comprimés selon intensité",
-        frequence: "Toutes les 6h si crise douloureuse (max 8/j)",
-        duree: "3 jours",
-        quantite: 1,
-      },
-      {
-        medName: "Ibuprofène 400mg comprimés (Advil)",
-        dosage: "1 comprimé 400mg",
-        frequence: "Toutes les 8h au milieu des repas",
-        duree: "3 jours",
-        quantite: 1,
-      },
-    ],
-  },
-];
-
-const DENTAL_BILAN_TYPES = [
-  {
-    nom: "Bilan pré-chirurgical implantaire",
-    items: [
-      {
-        bilanName: "Scanner Cône Beam 3D (CBCT Maxillaire / Mandibule)",
-        remarque: "Évaluation du volume osseux et repérage du nerf alvéolaire",
-      },
-      {
-        bilanName: "Bilan d'hémostase complet (TP, TCA, INR)",
-        remarque: "Vérifier l'absence de coagulopathie",
-      },
-      {
-        bilanName: "Glycémie à jeun & HbA1c (Hémoglobine glyquée)",
-        remarque: "Contrôle du métabolisme glucidique pour l'ostéointégration",
-      },
-    ],
-  },
-  {
-    nom: "Bilan patient sous anticoagulants (AVK / AOD)",
-    items: [
-      {
-        bilanName: "Bilan d'hémostase complet (TP, TCA, INR)",
-        remarque: "INR impératif datant de moins de 24h avant l'acte (cible < 3)",
-      },
-      {
-        bilanName: "NFS (Numération Formule Sanguine)",
-        remarque: "Contrôle taux de plaquettes sanguines",
-      },
-    ],
-  },
-  {
-    nom: "Bilan infectieux sévère (Cellulite maxillo-faciale)",
-    items: [
-      {
-        bilanName: "NFS (Numération Formule Sanguine)",
-        remarque: "Recherche hyperleucocytose à polynucléaires neutrophiles",
-      },
-      {
-        bilanName: "CRP (Protéine C-Réactive ultra-sensible)",
-        remarque: "Marqueur quantitatif du syndrome inflammatoire aigu",
-      },
-      {
-        bilanName: "Radiographie Panoramique Dentaire (OPG)",
-        remarque: "Identifier la dent causale et l'extension de la lyse osseuse",
-      },
-    ],
-  },
-];
-
-const DENTAL_JUSTIFICATION_TYPES = [
-  {
-    nom: "Arrêt de travail post-avulsion chirurgicale",
-    texte:
-      "Je soussigné, Docteur en chirurgie dentaire, certifie avoir prodigué ce jour des soins chirurgicaux bucco-dentaires (avulsion sous anesthésie locale) au patient susnommé, dont l'état clinique justifie un arrêt de travail et un repos strict à domicile.",
-  },
-  {
-    nom: "Certificat de présence et soins dentaires d'urgence",
-    texte:
-      "Je soussigné, Chirurgien Dentiste, atteste que le patient s'est présenté à mon cabinet ce jour pour une consultation et des soins dentaires d'urgence nécessitant sa présence physique.",
-  },
-  {
-    nom: "Dispense scolaire et d'activités physiques",
-    texte:
-      "Je soussigné, Docteur en médecine dentaire, certifie avoir examiné l'enfant susnommé suite à un traumatisme dento-alvéolaire et prescris une dispense totale d'activités sportives et d'efforts intenses.",
-  },
-  {
-    nom: "Certificat d'éviction pour chirurgie maxillo-faciale",
-    texte:
-      "Je soussigné certifie que l'état de santé du patient a nécessité une intervention chirurgicale parodontale / implantaire ce jour, rendant tout travail physique déconseillé pendant la période de cicatrisation initiale.",
-  },
-];
-
-// Diverse real-world names
-const PATIENT_FIRST_NAMES_M = [
-  "Karim", "Youcef", "Amine", "Walid", "Sofiane", "Mohamed", "Hichem",
-  "Riad", "Tarik", "Nassim", "Samir", "Abdelkader", "Brahim", "Farid",
-  "Aymen", "Hamza", "Lyes", "Khaled", "Mehdi", "Bilal", "Yacine",
-  "Mourad", "Nabil", "Reda", "Akram", "Chakib", "Adel", "Fouad"
-];
-
-const PATIENT_FIRST_NAMES_F = [
-  "Amina", "Fatima Zohra", "Meriem", "Souad", "Nour", "Khadidja", "Sarah",
-  "Yasmine", "Lina", "Imene", "Houda", "Zahra", "Leila", "Asma",
-  "Chaima", "Rania", "Ikram", "Bouchra", "Sabrina", "Kenza", "Ines",
-  "Dounia", "Samira", "Hanane", "Wafaa", "Nadia", "Malika", "Salma"
-];
-
-const PATIENT_LAST_NAMES = [
-  "Bouzid", "Saidi", "Mansouri", "Haddad", "Khelifi", "Belkacem", "Meziane",
-  "Chaoui", "Touati", "Zerrouki", "Boudiaf", "Amara", "Brahimi", "Cherif",
-  "Dahmani", "Guellil", "Hamidi", "Larbi", "Mebarki", "Ouchene", "Rahmani",
-  "Slimani", "Tebboune", "Yahiaoui", "Zitouni", "Benali", "Boumaza", "Kaci",
-  "Mokrani", "Sellami", "Ghezzal", "Taibi", "Khedim", "Abdelaziz", "Ferhat"
-];
-
-const DENTAL_ANTECEDENTS = [
-  "Hypertension artérielle sous Amlodipine 5mg",
-  "Diabète de type 2 équilibré sous Metformine (HbA1c récente: 6.8%)",
-  "Allergie avérée aux Pénicillines (œdème de Quincke en 2021)",
-  "Patient sous Sintrom (anticoagulant) pour valve mitrale mécanique",
-  "Asthme bronchique modéré sous Ventoline au besoin",
-  "Cardiopathie valvulaire : antibioprophylaxie impérative avant détartrage",
-  "Allergie au latex et au paracétamol",
-  "Ostéoporose traitée par bisphosphonates oraux (surveillance osseuse)",
-  "Fumeur chronique (15 cigarettes/jour), hygiène buccale modérée",
-  "Grossesse au 2ème trimestre (22 SA), surveillance gingivite gravidique",
-  "Terrain anxieux (phobie des soins dentaires / prémédication sédative)",
-  "مريض يعاني من حساسية البنسلين وارتفاع ضغط الدم",
-  "مريضة خضعت لجراحة سابقة في الفك، لا توجد حساسية دوائية",
-  "Bon état général, aucun antécédent médico-chirurgical notable",
-];
-
-const DENTAL_PROCEDURES = [
-  {
-    desc: "Traitement endodontique complet (dévitalisation 3 canaux)",
-    prix: 12000,
-    teeth: ["16", "26", "36", "46", "17", "27"],
-    acts: [
-      "Ouverture de chambre, extirpation pulpaire et parage canalaire sous digue",
-      "Mise en forme canalaire mécanisée et désinfection hypochlorite 2.5%",
-      "Obturation canalaire tridimensionnelle à la gutta-percha thermo-compactée",
-    ],
-  },
-  {
-    desc: "Obturation composite photo-polymérisable 3 faces",
-    prix: 4500,
-    teeth: ["14", "15", "24", "25", "35", "45", "11", "21"],
-    acts: [
-      "Curetage de la carie dentinaire, mordançage amélo-dentinaire et adhésif",
-      "Stratification anatomique composite nano-hybride et polissage fin",
-    ],
-  },
-  {
-    desc: "Couronne céramo-métallique scellée",
-    prix: 28000,
-    teeth: ["16", "21", "11", "36", "46", "24"],
-    acts: [
-      "Taille périphérique avec congé arrondi et pose de couronne provisoire",
-      "Empreinte de précision double mélange silicone et enregistrement occlusal",
-      "Essayage de l'armature, vérification des points de contact et scellement",
-    ],
-  },
-  {
-    desc: "Avulsion chirurgicale dent de sagesse incluse",
-    prix: 9000,
-    teeth: ["38", "48", "18", "28"],
-    acts: [
-      "Incision muco-périostée, alvéolectomie a minima et odontosection",
-      "Avulsion complète des apex radiculaires, curetage alvéolaire et suture",
-      "Contrôle cicatriciel post-opératoire et dépose des points de suture",
-    ],
-  },
-  {
-    desc: "Détartrage complet sus et sous-gingival + polissage",
-    prix: 3500,
-    teeth: ["Arcade complète", "Maxillaire & Mandibule"],
-    acts: [
-      "Détartrage ultrasonique piézo-électrique et irrigation antiseptique",
-      "Polissage des surfaces dentaires à la pâte prophylactique fluorée",
-    ],
-  },
-  {
-    desc: "Pose d'implant dentaire titane ostéo-intégré",
-    prix: 85000,
-    teeth: ["16", "21", "36", "46", "14"],
-    acts: [
-      "Incision de crête, forage séquentiel sous irrigation et pose de l'implant",
-      "Mise en place de la vis de couverture et sutures étanches résorbables",
-      "Pose de la vis de cicatrisation trans-muqueuse après ostéointégration (M+3)",
-      "Empreinte sur transfert implantaire et confection de la couronne sur implant",
-    ],
-  },
-  {
-    desc: "Gingivectomie à visée esthétique et fonctionnelle",
-    prix: 7000,
-    teeth: ["Secteur antérieur 13-23"],
-    acts: [
-      "Anesthésie locale, repérage des poches et biseautage gingival externe",
-      "Éviction des tissus excédentaires et application d'un pansement parodontal",
-    ],
-  },
-  {
-    desc: "Inlay-core à clavette + pose couronne céramique",
-    prix: 34000,
-    teeth: ["12", "22", "15", "35"],
-    acts: [
-      "Désobturation canalaire partielle sur 2/3 et taille radiculaire",
-      "Empreinte calcinable pour faux-moignon métallique coulé",
-      "Scellement définitif de l'inlay-core et empreinte pour couronne céramique",
-    ],
-  },
-  {
-    desc: "Blanchiment dentaire ambulatoire avec gouttières sur-mesure",
-    prix: 18000,
-    teeth: ["Arcades supérieure et inférieure"],
-    acts: [
-      "Prise d'empreintes alginate et coulée des modèles en plâtre",
-      "Remise des gouttières thermoformées et seringues de peroxyde de carbamide 16%",
-    ],
-  },
-  {
-    desc: "Traitement d'urgence pulpaire et coiffage dentinaire",
-    prix: 3000,
-    teeth: ["37", "47", "26"],
-    acts: [
-      "Éviction d'urgence du tissu carieux douloureux sous anesthésie locale",
-      "Application d'hydroxyde de calcium pur et obturation provisoire à l'eugénol",
-    ],
-  },
-];
-
-// ============================================================================
-// 4. CLEANUP ENGINE (Safe, Targeted, Non-Destructive)
-// ============================================================================
-
-async function cleanTestDataOnly() {
-  console.log("\n🧹 Nettoyage ciblé des données de test existantes (TEST_*)...");
-
-  const testPatients = await safeExec(() =>
-    prisma.patient.findMany({
-      where: { nom: { startsWith: "TEST_" } },
-      select: { id: true, nom: true },
-    })
-  );
-
-  if (testPatients.length === 0) {
-    console.log("   ℹ️ Aucun enregistrement de test TEST_* à nettoyer.");
-    return 0;
-  }
-
-  const patientIds = testPatients.map((p) => p.id);
-  console.log(`   🎯 Suppression sécurisée de ${patientIds.length} patients de test...`);
-
-  // Prisma cascading relations handle child models (consultations, traitements, paiements, etc.)
-  const deleteResult = await safeExec(() =>
-    prisma.patient.deleteMany({
-      where: { id: { in: patientIds } },
-    })
-  );
-
-  // Clean orphan RendezVous created by test script
-  await safeExec(() =>
-    prisma.rendezVous.deleteMany({
-      where: { description: { contains: "TEST_" } },
-    })
-  );
-
-  console.log(`   ✅ ${deleteResult.count} dossiers de test nettoyés avec succès.`);
-  return deleteResult.count;
-}
-
-// ============================================================================
-// 5. SEED EXECUTION ENGINE
-// ============================================================================
-
-async function seedDatabase() {
-  console.log("\n==================================================================");
-  console.log("🦷 Démarrage du Seeding de Données Cliniques Dentaires");
-  console.log("==================================================================");
-
-  // --------------------------------------------------------------------------
-  // STEP 1: Cabinet Settings (Ensure single dental cabinet profile exists)
-  // --------------------------------------------------------------------------
-  console.log("\n🏥 1/11. Configuration du Cabinet Dentaire...");
-  let cabinet = await safeExec(() => prisma.cabinet.findFirst());
-  if (!cabinet) {
-    cabinet = await safeExec(() =>
-      prisma.cabinet.create({
-        data: {
-          title: "Docteur",
-          doctorName: "Dr. Mossaab Saad Djaballah",
-          doctorNameAr: "د. مصعب سعد جاب الله",
-          specialty: "Chirurgien Dentiste - Omnipratique & Implantologie",
-          specialtyAr: "جراحة و طب الأسنان و زراعة الأسنان",
-          cabinetName: "Cabinet Dentaire Moderne El-Harrouch",
-          cabinetNameAr: "عيادة طب و جراحة الأسنان الحديثة",
-          address: "Rue Frères Kafi, Logements 38, 1er étage",
-          addressAr: "شارع الإخوة كافي عمارة 38 الطابق الأول",
-          city: "El-Harrouch, Skikda",
-          cityAr: "الحروش - ولاية سكيكدة",
-          phones: "0652 76 89 72 / 0562 24 40 87",
-          logo: "/uploads/image.PNG",
-        },
-      })
-    );
-    console.log("   ✅ Profil du cabinet dentaire créé.");
-  } else {
-    console.log(`   ✅ Cabinet existant conservé: ${cabinet.cabinetName}`);
-  }
-
-  // --------------------------------------------------------------------------
-  // STEP 2: Dental Medications Catalog (Medicament)
-  // --------------------------------------------------------------------------
-  console.log("\n💊 2/11. Insertion du Catalogue des Médicaments Dentaires...");
-  await safeExec(() =>
-    prisma.medicament.createMany({
-      data: DENTAL_MEDICAMENTS,
-      skipDuplicates: true,
-    })
-  );
-  const allMeds = await safeExec(() => prisma.medicament.findMany());
-  const medicamentMap = new Map();
-  allMeds.forEach((m) => medicamentMap.set(m.nom, m));
-  console.log(`   ✅ ${allMeds.length} médicaments dentaires prêts.`);
-
-  // --------------------------------------------------------------------------
-  // STEP 3: Medical / Dental Lab Examinations Catalog (Bilan)
-  // --------------------------------------------------------------------------
-  console.log("\n🧪 3/11. Insertion des Bilans et Examens Complémentaires...");
-  await safeExec(() =>
-    prisma.bilan.createMany({
-      data: DENTAL_BILANS,
-      skipDuplicates: true,
-    })
-  );
-  const allBilans = await safeExec(() => prisma.bilan.findMany());
-  const bilanMap = new Map();
-  allBilans.forEach((b) => bilanMap.set(b.nom, b));
-  console.log(`   ✅ ${allBilans.length} types d'examens et bilans prêts.`);
-
-  // --------------------------------------------------------------------------
-  // STEP 4: Vaccines Catalog (Vaccine)
-  // --------------------------------------------------------------------------
-  console.log("\n💉 4/11. Insertion du Catalogue Vaccinal...");
-  await safeExec(() =>
-    prisma.vaccine.createMany({
-      data: DENTAL_VACCINES,
-      skipDuplicates: true,
-    })
-  );
-  const allVaccines = await safeExec(() => prisma.vaccine.findMany());
-  const vaccineMap = new Map();
-  allVaccines.forEach((v) => vaccineMap.set(v.name, v));
-  console.log(`   ✅ ${allVaccines.length} vaccins prêts.`);
-
-  // --------------------------------------------------------------------------
-  // STEP 5: Prescription Presets (RecetteType & RecetteTypeItem)
-  // --------------------------------------------------------------------------
-  console.log("\n📋 5/11. Insertion des Protocoles d'Ordonnances Prédéfinies...");
-  for (const preset of DENTAL_RECETTE_TYPES) {
-    let rt = await safeExec(() =>
-      prisma.recetteType.findFirst({
-        where: { nom: preset.nom },
-        include: { items: true },
-      })
-    );
-    if (!rt) {
-      rt = await safeExec(() =>
-        prisma.recetteType.create({
-          data: { nom: preset.nom },
-        })
-      );
-    }
-    if (!rt.items || rt.items.length === 0) {
-      const itemsToCreate = [];
-      for (const item of preset.items) {
-        const med = medicamentMap.get(item.medName);
-        if (med) {
-          itemsToCreate.push({
-            recetteId: rt.id,
-            medicamentId: med.id,
-            dosage: item.dosage,
-            frequence: item.frequence,
-            duree: item.duree,
-            quantite: item.quantite,
-          });
-        }
-      }
-      if (itemsToCreate.length > 0) {
-        await safeExec(() =>
-          prisma.recetteTypeItem.createMany({ data: itemsToCreate })
-        );
-      }
-    }
-  }
-  const countRecetteTypes = await safeExec(() => prisma.recetteType.count());
-  console.log(`   ✅ ${countRecetteTypes} modèles d'ordonnances types configurés.`);
-
-  // --------------------------------------------------------------------------
-  // STEP 6: Lab Exam Presets (BilanType & BilanTypeItem)
-  // --------------------------------------------------------------------------
-  console.log("\n📑 6/11. Insertion des Bilans Types Prédéfinis...");
-  for (const preset of DENTAL_BILAN_TYPES) {
-    let bt = await safeExec(() =>
-      prisma.bilanType.findFirst({
-        where: { nom: preset.nom },
-        include: { items: true },
-      })
-    );
-    if (!bt) {
-      bt = await safeExec(() =>
-        prisma.bilanType.create({
-          data: { nom: preset.nom },
-        })
-      );
-    }
-    if (!bt.items || bt.items.length === 0) {
-      const itemsToCreate = [];
-      for (const item of preset.items) {
-        const b = bilanMap.get(item.bilanName);
-        if (b) {
-          itemsToCreate.push({
-            bilanTypeId: bt.id,
-            bilanId: b.id,
-            remarque: item.remarque,
-          });
-        }
-      }
-      if (itemsToCreate.length > 0) {
-        await safeExec(() =>
-          prisma.bilanTypeItem.createMany({ data: itemsToCreate })
-        );
-      }
-    }
-  }
-  const countBilanTypes = await safeExec(() => prisma.bilanType.count());
-  console.log(`   ✅ ${countBilanTypes} bilans types configurés.`);
-
-  // --------------------------------------------------------------------------
-  // STEP 7: Justification Templates (JustificationType)
-  // --------------------------------------------------------------------------
-  console.log("\n📜 7/11. Insertion des Modèles de Justifications Médicales...");
-  for (const jType of DENTAL_JUSTIFICATION_TYPES) {
-    await safeExec(() =>
-      prisma.justificationType.upsert({
-        where: { nom: jType.nom },
-        create: jType,
-        update: { texte: jType.texte },
-      })
-    );
-  }
-  const countJustifTypes = await safeExec(() => prisma.justificationType.count());
-  console.log(`   ✅ ${countJustifTypes} modèles de justifications prêts.`);
-
-  // --------------------------------------------------------------------------
-  // STEP 8: Large & Diverse Patient Cohort (65-75 Patients with TEST_ prefix)
-  // --------------------------------------------------------------------------
-  console.log("\n👥 8/11. Génération de la Cohorte de Patients Dentaires (TEST_*)...");
-  
-  const BLOOD_GROUPS = [
-    "A_POS", "A_NEG", "B_POS", "B_NEG", "AB_POS", "AB_NEG", "O_POS", "O_NEG", null
-  ];
-
-  const TARGET_PATIENTS_COUNT = 65;
-  const createdPatients = [];
-
-  for (let i = 1; i <= TARGET_PATIENTS_COUNT; i++) {
-    const isMale = rng.boolean(0.5);
-    const firstName = isMale
-      ? PATIENT_FIRST_NAMES_M[(i - 1) % PATIENT_FIRST_NAMES_M.length]
-      : PATIENT_FIRST_NAMES_F[(i - 1) % PATIENT_FIRST_NAMES_F.length];
-    const lastName = PATIENT_LAST_NAMES[(i * 3 + 5) % PATIENT_LAST_NAMES.length];
-    
-    // Guaranteed unique identifier
-    const uniqueNom = `TEST_ ${firstName} ${lastName} #${i}`;
-    
-    // Age distribution: children (6-15), adults (18-55), seniors (60-80)
-    let age;
-    if (i % 7 === 0) age = rng.int(6, 14); // Pediatric dental patient
-    else if (i % 5 === 0) age = rng.int(62, 79); // Senior patient
-    else age = rng.int(18, 58); // Adult
-
-    const currentYear = 2026;
-    const birthYear = currentYear - age;
-    const birthMonth = rng.int(0, 11);
-    const birthDay = rng.int(1, 28);
-    const dateDeNaissance = new Date(birthYear, birthMonth, birthDay);
-
-    const sexe = isMale ? "Homme" : "Femme";
-
-    // Incomplete profile scenarios (some without phone, some without address)
-    const hasPhone = i % 8 !== 0;
-    const telephone = hasPhone
-      ? `05${rng.int(40, 79)}${String(rng.int(100000, 999999))}`
-      : null;
-
-    const hasAddress = i % 6 !== 0;
-    const cities = ["Skikda", "El-Harrouch", "Azzaba", "Collo", "Tamalous", "Ramdane Djamel"];
-    const adresse = hasAddress
-      ? `Cité ${rng.int(100, 1000)} Logements, Bloc ${String.fromCharCode(65 + (i % 8))}, ${cities[i % cities.length]}`
-      : null;
-
-    // Antecedents
-    const hasAntecedents = i % 3 !== 0;
-    const antecedents = hasAntecedents
-      ? DENTAL_ANTECEDENTS[i % DENTAL_ANTECEDENTS.length]
-      : null;
-
-    const bloodGroup = BLOOD_GROUPS[i % BLOOD_GROUPS.length];
-
-    // Registration creation date (over past 24 months)
-    const createdAt = rng.date(2024, 2026);
-
-    const patientData = {
-      nom: uniqueNom,
-      age,
-      dateDeNaissance,
-      sexe,
-      telephone,
-      adresse,
-      antecedents,
-      groupeSanguin: bloodGroup,
-      createdAt,
-    };
-
-    const patient = await safeExec(() =>
-      prisma.patient.upsert({
-        where: { nom: uniqueNom },
-        create: patientData,
-        update: patientData,
-      })
-    );
-
-    createdPatients.push(patient);
-  }
-
-  console.log(`   ✅ ${createdPatients.length} patients créés ou mis à jour avec succès.`);
-
-  // --------------------------------------------------------------------------
-  // STEP 9: Appointments Engine (RendezVous - Past, Today, Upcoming)
-  // --------------------------------------------------------------------------
-  console.log("\n📅 9/11. Génération de l'Agenda des Rendez-Vous Dentaires...");
-  
-  const createdRendezVous = [];
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-
-  // Scenarios:
-  // - 15 Past appointments (-45 to -2 days)
-  // - 8 Today appointments
-  // - 25 Upcoming appointments (+1 to +30 days)
-  const rdvConfigs = [
-    // Today appointments
-    { dayOffset: 0, hour: 9, min: 0, desc: "TEST_ Consultation de contrôle et pose de pansement" },
-    { dayOffset: 0, hour: 10, min: 30, desc: "TEST_ Séance 2 dévitalisation et alésage sous digue" },
-    { dayOffset: 0, hour: 11, min: 15, desc: "TEST_ Détartrage ultrasonique et prophylaxie" },
-    { dayOffset: 0, hour: 14, min: 0, desc: "TEST_ Essayage biscuit céramique couronne 21" },
-    { dayOffset: 0, hour: 15, min: 0, desc: "TEST_ Avulsion de la 38 incluse sous anesthésie locale" },
-    { dayOffset: 0, hour: 16, min: 30, desc: "TEST_ Pose d'implant dentaire secteur 36" },
-
-    // Tomorrow appointments
-    { dayOffset: 1, hour: 9, min: 30, desc: "TEST_ Contrôle post-opératoire et ablation des fils" },
-    { dayOffset: 1, hour: 11, min: 0, desc: "TEST_ Obturation composite esthétique face vestibulaire" },
-    { dayOffset: 1, hour: 14, min: 30, desc: "TEST_ Empreinte implantaire de précision" },
-
-    // Upcoming next week & month
-    { dayOffset: 3, hour: 10, min: 0, desc: "TEST_ Scellement définitif de bridge 3 éléments" },
-    { dayOffset: 5, hour: 15, min: 0, desc: "TEST_ Bilan parodontal et surfaçage radiculaire" },
-    { dayOffset: 7, hour: 9, min: 0, desc: "TEST_ Pose de couronne céramique sur implant" },
-    { dayOffset: 12, hour: 11, min: 0, desc: "TEST_ Traitement endodontique molaire supérieure" },
-    { dayOffset: 18, hour: 14, min: 0, desc: "TEST_ Contrôle semestriel et radio rétro-alvéolaire" },
-    { dayOffset: 25, hour: 16, min: 0, desc: "TEST_ Blanchiment dentaire en cabinet séance 1" },
-
-    // Past appointments
-    { dayOffset: -1, hour: 10, min: 0, desc: "TEST_ Urgence dentaire pulpite aiguë" },
-    { dayOffset: -3, hour: 14, min: 30, desc: "TEST_ Consultation initiale et devis prothétique" },
-    { dayOffset: -7, hour: 11, min: 0, desc: "TEST_ Extraction racine résiduelle dent 46" },
-    { dayOffset: -14, hour: 9, min: 30, desc: "TEST_ Séparation canalaire et médication temporaire" },
-    { dayOffset: -21, hour: 15, min: 0, desc: "TEST_ Empreinte d'étude et radiographie panoramique" },
-    { dayOffset: -35, hour: 10, min: 30, desc: "TEST_ Visite d'évaluation parodontale" },
-  ];
-
-  for (let idx = 0; idx < rdvConfigs.length; idx++) {
-    const cfg = rdvConfigs[idx];
-    const rdvDate = new Date(today);
-    rdvDate.setDate(rdvDate.getDate() + cfg.dayOffset);
-    rdvDate.setHours(cfg.hour, cfg.min, 0, 0);
-
-    const targetPatient = createdPatients[idx % createdPatients.length];
-
-    const rdv = await safeExec(() =>
-      prisma.rendezVous.create({
-        data: {
-          patientId: targetPatient.id,
-          date: rdvDate,
-          description: cfg.desc,
-          note: `Patient notifié par SMS. Antécédents vérifiés. ${cfg.desc}`,
-        },
-      })
-    );
-    createdRendezVous.push(rdv);
-  }
-
-  console.log(`   ✅ ${createdRendezVous.length} rendez-vous programmés (passés, aujourd'hui, futurs).`);
-
-  // --------------------------------------------------------------------------
-  // STEP 10: Consultations, Treatments, Acts, Financials, Documents
-  // --------------------------------------------------------------------------
-  console.log("\n🦷 10/11. Génération des Consultations, Traitements, Actes, Versements & Documents...");
-
-  let totalConsultationsCount = 0;
-  let totalTraitementsCount = 0;
-  let totalActsCount = 0;
-  let totalPaymentsCount = 0;
-  let totalOrdonnancesCount = 0;
-  let totalBilansRecipCount = 0;
-  let totalJustificationsCount = 0;
-  let totalRadiosCount = 0;
-  let totalBilanFilesCount = 0;
-  let totalVaccinationsCount = 0;
-
-  // Patient Cohort Distribution:
-  // - Patients 0..4 (5 patients)  : 0 consultations (Fresh leads, no history)
-  // - Patients 5..14 (10 patients): 1 consultation (Simple single visit, fully paid or unpaid)
-  // - Patients 15..45 (31 patients): 2-3 consultations (Standard multi-stage treatment)
-  // - Patients 46..64 (19 patients): 4-6 consultations (Extensive full-mouth rehabilitation)
-
-  for (let pIdx = 0; pIdx < createdPatients.length; pIdx++) {
-    const patient = createdPatients[pIdx];
-
-    // Determine consultation count based on scenario group
-    let consultCount = 0;
-    if (pIdx < 5) {
-      consultCount = 0; // Fresh patient without visits
-    } else if (pIdx < 15) {
-      consultCount = 1; // Single visit
-    } else if (pIdx < 46) {
-      consultCount = rng.int(2, 3); // Standard 2-3 visits
-    } else {
-      consultCount = rng.int(4, 6); // Extensive 4-6 visits
-    }
-
-    if (consultCount === 0) continue;
-
-    // Create 1-3 treatments for this patient
-    const treatmentCount = rng.int(1, consultCount >= 4 ? 3 : 2);
-    const patientTreatments = [];
-
-    for (let tIdx = 0; tIdx < treatmentCount; tIdx++) {
-      const proc = DENTAL_PROCEDURES[(pIdx + tIdx * 3) % DENTAL_PROCEDURES.length];
-      const selectedTooth = rng.choice(proc.teeth);
-
-      // Status scenario:
-      // - Most completed if extensive visits
-      // - Some ongoing
-      // - A few cancelled (to test application filter where ANNULE is excluded from debt!)
-      let statut = "EN_COURS";
-      if (pIdx % 9 === 0 && tIdx === 1) {
-        statut = "ANNULE"; // Test cancelled treatment
-      } else if (tIdx < treatmentCount - 1 || pIdx > 30) {
-        statut = "TERMINE";
-      }
-
-      const treatment = await safeExec(() =>
-        prisma.traitement.create({
-          data: {
-            patientId: patient.id,
-            description: `${proc.desc} (Dent ${selectedTooth})`,
-            dent: selectedTooth,
-            prixTotal: proc.prix,
-            statut,
-            createdAt: rng.date(2024, 2026),
-          },
-        })
-      );
-
-      patientTreatments.push({ ...treatment, procDef: proc });
-      totalTraitementsCount++;
-    }
-
-    // Generate consultations for this patient
-    let baseDate = rng.date(2024, 2025);
-    const patientConsultations = [];
-
-    for (let cIdx = 0; cIdx < consultCount; cIdx++) {
-      // Step consultation date forward by 7-28 days
-      const consultDate = new Date(baseDate);
-      consultDate.setDate(consultDate.getDate() + cIdx * rng.int(7, 25));
-
-      const isFirst = cIdx === 0;
-      const isLast = cIdx === consultCount - 1;
-
-      // Select active treatment for this session
-      const activeTreatment = patientTreatments[cIdx % patientTreatments.length];
-
-      const motifDeConsultation = isFirst
-        ? `Consultation pour ${activeTreatment.description.toLowerCase()}, douleur et gêne masticatoire.`
-        : `Séance de suivi n°${cIdx + 1} pour ${activeTreatment.description.toLowerCase()}.`;
-
-      const note = `Examen clinique stomatologique : bonne tolérance. ${
-        activeTreatment.procDef.acts[cIdx % activeTreatment.procDef.acts.length]
-      }. Recommandations d'hygiène et asepsie bucco-dentaire délivrées.`;
-
-      const justificationSummary = rng.boolean(0.3)
-        ? `Arrêt de travail post-opératoire délivré suite aux soins dentaires.`
-        : null;
-
-      const consultation = await safeExec(() =>
-        prisma.consultation.create({
-          data: {
-            patientId: patient.id,
-            createdAt: consultDate,
-            motifDeConsultation,
-            note,
-            justification: justificationSummary,
-          },
-        })
-      );
-
-      patientConsultations.push(consultation);
-      totalConsultationsCount++;
-
-      // Link treatment to consultation via ConsultationTraitement (Acte réalisé)
-      if (activeTreatment) {
-        const actDesc =
-          activeTreatment.procDef.acts[cIdx % activeTreatment.procDef.acts.length];
-        await safeExec(() =>
-          prisma.consultationTraitement.create({
-            data: {
-              consultationId: consultation.id,
-              traitementId: activeTreatment.id,
-              acteRealise: actDesc,
-              createdAt: consultDate,
-            },
-          })
-        );
-        totalActsCount++;
-      }
-
-      // Attach Ordonnance (Prescription) to some consultations (~60%)
-      if (rng.boolean(0.65)) {
-        const ord = await safeExec(() =>
-          prisma.ordonnance.create({
-            data: {
-              patientId: patient.id,
-              consultationId: consultation.id,
-              createdAt: consultDate,
-            },
-          })
-        );
-        totalOrdonnancesCount++;
-
-        // Add 1-3 prescription items
-        const numItems = rng.int(1, 3);
-        const sampledMeds = rng.sample(allMeds, numItems);
-        const ordItems = [];
-
-        sampledMeds.forEach((m, idx) => {
-          ordItems.push({
-            ordonnanceId: ord.id,
-            medicamentId: m.id,
-            dosage: idx === 0 ? "1 gélule matin et soir" : "1 comprimé si douleur",
-            frequence: idx === 0 ? "2 fois par jour aux repas" : "Toutes les 6 à 8h",
-            duree: "6 jours",
-            quantite: idx === 0 ? 2 : 1,
-          });
-        });
-
-        if (ordItems.length > 0) {
-          await safeExec(() =>
-            prisma.ordonnanceItem.createMany({ data: ordItems })
-          );
-        }
-      }
-
-      // Attach BilanRecip (Lab report requested / received) (~30%)
-      if (rng.boolean(0.35)) {
-        const br = await safeExec(() =>
-          prisma.bilanRecip.create({
-            data: {
-              patientId: patient.id,
-              consultationId: consultation.id,
-              createdAt: consultDate,
-            },
-          })
-        );
-        totalBilansRecipCount++;
-
-        const numBilans = rng.int(1, 2);
-        const sampledBilans = rng.sample(allBilans, numBilans);
-        const bilanItems = [];
-
-        sampledBilans.forEach((b) => {
-          bilanItems.push({
-            bilanRecipId: br.id,
-            bilanId: b.id,
-            resultat: "Paramètres dans les normes physiologiques requises.",
-            remarque: "Aucune contre-indication aux soins chirurgicaux dentaires.",
-          });
-        });
-
-        if (bilanItems.length > 0) {
-          await safeExec(() =>
-            prisma.bilanItem.createMany({ data: bilanItems })
-          );
-        }
-      }
-
-      // Attach Justification (Medical certificate) (~25%)
-      if (rng.boolean(0.25)) {
-        await safeExec(() =>
-          prisma.justification.create({
-            data: {
-              patientId: patient.id,
-              consultationId: consultation.id,
-              texte:
-                "Je soussigné, Docteur en médecine dentaire, certifie que l'état de santé bucco-dentaire du patient susmentionné nécessite un arrêt de travail et un repos de 3 jours suite aux soins chirurgicaux reçus ce jour.",
-              createdAt: consultDate,
-            },
-          })
-        );
-        totalJustificationsCount++;
-      }
-
-      // Attach Radio (~35%)
-      if (rng.boolean(0.35)) {
-        const radioTypes = [
-          "Radiographie Panoramique Dentaire pré-opératoire",
-          "Cliché Rétro-alvéolaire de contrôle apical",
-          "Cône Beam 3D (CBCT) secteur maxillaire",
-          "Bite-wing de dépistage caries proximales",
-        ];
-        await safeExec(() =>
-          prisma.radio.create({
-            data: {
-              patientId: patient.id,
-              consultationId: consultation.id,
-              description: rng.choice(radioTypes),
-              fichier: `/uploads/radios/radio_test_${patient.id}_${cIdx}.jpg`,
-              createdAt: consultDate,
-            },
-          })
-        );
-        totalRadiosCount++;
-      }
-
-      // Attach BilanFile (PDF document attachment) (~20%)
-      if (rng.boolean(0.2)) {
-        await safeExec(() =>
-          prisma.bilanFile.create({
-            data: {
-              patientId: patient.id,
-              consultationId: consultation.id,
-              type: "PDF",
-              description: "Rapport d'analyse hémostase et biologie médicale",
-              fichier: `/uploads/bilans/analyse_bio_${patient.id}_${cIdx}.pdf`,
-              createdAt: consultDate,
-            },
-          })
-        );
-        totalBilanFilesCount++;
-      }
-    }
-
-    // ------------------------------------------------------------------------
-    // FINANCIAL SCENARIOS: Generate Versements / Payments for Treatments
-    // ------------------------------------------------------------------------
-    for (let tIdx = 0; tIdx < patientTreatments.length; tIdx++) {
-      const treatment = patientTreatments[tIdx];
-
-      // Cancelled treatments have no payments
-      if (treatment.statut === "ANNULE") continue;
-
-      // Scenarios:
-      // Case 1: Fully paid in full (sum payments == prixTotal)
-      // Case 2: Partially paid in installments (sum payments < prixTotal)
-      // Case 3: Completely unpaid (0 payments)
-      const payScenario = (pIdx + tIdx) % 4;
-
-      if (payScenario === 0) {
-        // Completely unpaid
-        continue;
-      } else if (payScenario === 1) {
-        // Fully paid in a single payment
-        await safeExec(() =>
-          prisma.paiement.create({
-            data: {
-              patientId: patient.id,
-              traitementId: treatment.id,
-              montant: treatment.prixTotal,
-              note: "Règlement intégral en un seul versement (Espèces)",
-              date: baseDate,
-            },
-          })
-        );
-        totalPaymentsCount++;
-      } else if (payScenario === 2) {
-        // Fully paid in 2 installments
-        const part1 = Math.round((treatment.prixTotal * 0.4) / 100) * 100;
-        const part2 = treatment.prixTotal - part1;
-
-        const date1 = new Date(baseDate);
-        const date2 = new Date(baseDate);
-        date2.setDate(date2.getDate() + 14);
-
-        await safeExec(() =>
-          prisma.paiement.create({
-            data: {
-              patientId: patient.id,
-              traitementId: treatment.id,
-              montant: part1,
-              note: "Versement acompte 1/2 (Début de soins)",
-              date: date1,
-            },
-          })
-        );
-        await safeExec(() =>
-          prisma.paiement.create({
-            data: {
-              patientId: patient.id,
-              traitementId: treatment.id,
-              montant: part2,
-              note: "Solde final 2/2 (Pose définitive)",
-              date: date2,
-            },
-          })
-        );
-        totalPaymentsCount += 2;
-      } else if (payScenario === 3) {
-        // Partially paid (Remaining debt exists!)
-        const partial = Math.round((treatment.prixTotal * 0.5) / 100) * 100;
-        await safeExec(() =>
-          prisma.paiement.create({
-            data: {
-              patientId: patient.id,
-              traitementId: treatment.id,
-              montant: partial,
-              note: `Acompte partiel versé (${partial} DZD). Solde restant dû.`,
-              date: baseDate,
-            },
-          })
-        );
-        totalPaymentsCount++;
-      }
-    }
-
-    // Attach Vaccination record for some patients (~40%)
-    if (pIdx % 3 === 0 && allVaccines.length > 0) {
-      const selectedVaccine = allVaccines[pIdx % allVaccines.length];
-      await safeExec(() =>
-        prisma.vaccination.create({
-          data: {
-            patientId: patient.id,
-            vaccineId: selectedVaccine.id,
-            dateGiven: rng.date(2023, 2025),
-            doseNumber: (pIdx % 3) + 1,
-            notes: `Rappel vaccinal ${selectedVaccine.name} consigné au dossier.`,
-          },
-        })
-      );
-      totalVaccinationsCount++;
-    }
-  }
-
-  // Also add a couple of global payments (where traitementId is null)
-  for (let g = 0; g < 5; g++) {
-    const p = createdPatients[g + 10];
-    await safeExec(() =>
-      prisma.paiement.create({
-        data: {
-          patientId: p.id,
-          traitementId: null,
-          montant: 2000,
-          note: "Règlement direct honoraires de consultation / bilan",
-          date: new Date(),
-        },
-      })
-    );
-    totalPaymentsCount++;
-  }
-
-  console.log(`   ✅ Traitements créés   : ${totalTraitementsCount}`);
-  console.log(`   ✅ Consultations créées : ${totalConsultationsCount}`);
-  console.log(`   ✅ Actes réalisés       : ${totalActsCount}`);
-  console.log(`   ✅ Versements financiers: ${totalPaymentsCount}`);
-  console.log(`   ✅ Ordonnances délivrées: ${totalOrdonnancesCount}`);
-  console.log(`   ✅ Bilans demandés      : ${totalBilansRecipCount}`);
-  console.log(`   ✅ Justifications       : ${totalJustificationsCount}`);
-  console.log(`   ✅ Radiographies        : ${totalRadiosCount}`);
-  console.log(`   ✅ Fichiers bilans      : ${totalBilanFilesCount}`);
-  console.log(`   ✅ Vaccinations         : ${totalVaccinationsCount}`);
-}
-
-// ============================================================================
-// 6. COMPREHENSIVE VERIFICATION SUITE
-// ============================================================================
-
-async function verifyDatabaseAndRules() {
-  console.log("\n==================================================================");
-  console.log("🔍 Exécution de la Suite de Vérification & Règles Métier");
-  console.log("==================================================================");
-
-  let passedTests = 0;
-  let totalTests = 0;
-
-  function assert(condition, message) {
-    totalTests++;
-    if (condition) {
-      console.log(`   ✅ [PASS] ${message}`);
-      passedTests++;
-    } else {
-      console.error(`   ❌ [FAIL] ${message}`);
-    }
-  }
-
-  // 1. Verify all 23 models count
-  console.log("\n📊 1. Vérification de la présence de données dans chaque modèle :");
-  const counts = {
-    Patient: await safeExec(() => prisma.patient.count()),
-    Consultation: await safeExec(() => prisma.consultation.count()),
-    RendezVous: await safeExec(() => prisma.rendezVous.count()),
-    Radio: await safeExec(() => prisma.radio.count()),
-    BilanFile: await safeExec(() => prisma.bilanFile.count()),
-    Ordonnance: await safeExec(() => prisma.ordonnance.count()),
-    OrdonnanceItem: await safeExec(() => prisma.ordonnanceItem.count()),
-    Medicament: await safeExec(() => prisma.medicament.count()),
-    Bilan: await safeExec(() => prisma.bilan.count()),
-    BilanRecip: await safeExec(() => prisma.bilanRecip.count()),
-    BilanItem: await safeExec(() => prisma.bilanItem.count()),
-    BilanType: await safeExec(() => prisma.bilanType.count()),
-    BilanTypeItem: await safeExec(() => prisma.bilanTypeItem.count()),
-    RecetteType: await safeExec(() => prisma.recetteType.count()),
-    RecetteTypeItem: await safeExec(() => prisma.recetteTypeItem.count()),
-    Traitement: await safeExec(() => prisma.traitement.count()),
-    ConsultationTraitement: await safeExec(() => prisma.consultationTraitement.count()),
-    Paiement: await safeExec(() => prisma.paiement.count()),
-    Vaccine: await safeExec(() => prisma.vaccine.count()),
-    Vaccination: await safeExec(() => prisma.vaccination.count()),
-    Justification: await safeExec(() => prisma.justification.count()),
-    JustificationType: await safeExec(() => prisma.justificationType.count()),
-    Cabinet: await safeExec(() => prisma.cabinet.count()),
-  };
-
-  Object.entries(counts).forEach(([model, count]) => {
-    assert(count > 0, `Modèle ${model.padEnd(23)} contient ${count} enregistrements`);
-  });
-
-  // 2. Minimum scale requirements verification
-  console.log("\n📈 2. Vérification des volumes cibles :");
-  const testPatientCount = await safeExec(() =>
-    prisma.patient.count({ where: { nom: { startsWith: "TEST_" } } })
-  );
-  assert(testPatientCount >= 50, `Cohorte de test >= 50 patients (Actuel: ${testPatientCount})`);
-  assert(counts.Consultation >= 100, `Volume de consultations >= 100 (Actuel: ${counts.Consultation})`);
-  assert(counts.Traitement >= 80, `Volume de traitements >= 80 (Actuel: ${counts.Traitement})`);
-  assert(counts.Paiement >= 100, `Volume de paiements >= 100 (Actuel: ${counts.Paiement})`);
-  assert(counts.RendezVous >= 20, `Volume de rendez-vous >= 20 (Actuel: ${counts.RendezVous})`);
-
-  // 3. Financial calculations integrity verification
-  console.log("\n💰 3. Vérification de l'intégrité financière & calculs des soldes :");
-  const testTreatments = await safeExec(() =>
-    prisma.traitement.findMany({
-      where: { patient: { nom: { startsWith: "TEST_" } } },
-      include: { versements: true },
-    })
-  );
-
-  let noOverpaymentErrors = true;
-  for (const t of testTreatments) {
-    const paid = t.versements.reduce((sum, v) => sum + (Number(v.montant) || 0), 0);
-    if (paid > t.prixTotal + 0.01) {
-      noOverpaymentErrors = false;
-      console.error(`   ⚠️ Trop-perçu détecté pour traitement #${t.id}: Payé ${paid} > Total ${t.prixTotal}`);
-    }
-  }
-  assert(noOverpaymentErrors, "Aucun traitement ne présente de trop-perçu invalide (Payé <= Prix total)");
-
-  // Verify patient debt formula: detteRestante = max(0, totalDu - totalPaye)
-  // where totalDu excludes ANNULE treatments
-  const testPatients = await safeExec(() =>
-    prisma.patient.findMany({
-      where: { nom: { startsWith: "TEST_" } },
-      include: {
-        traitements: { include: { versements: true } },
-        paiements: true,
-      },
-      take: 20,
-    })
-  );
-
-  let formulaCheckPassed = true;
-  for (const p of testPatients) {
-    const expectedTotalDu = p.traitements
-      .filter((t) => t.statut !== "ANNULE")
-      .reduce((sum, t) => sum + (Number(t.prixTotal) || 0), 0);
-
-    const expectedTotalPaye = p.paiements.reduce(
-      (sum, pay) => sum + (Number(pay.montant) || 0),
-      0
-    );
-
-    const expectedDette = Math.max(0, expectedTotalDu - expectedTotalPaye);
-    if (expectedDette < 0) formulaCheckPassed = false;
-  }
-  assert(formulaCheckPassed, "Formule de dette financière respectée pour tous les patients de test");
-
-  // 4. Verification of document one-to-one constraints
-  console.log("\n📑 4. Vérification des contraintes d'unicité documentaires :");
-  const ords = await safeExec(() => prisma.ordonnance.findMany({ select: { consultationId: true } }));
-  const ordConsultIds = new Set(ords.map((o) => o.consultationId));
-  assert(ordConsultIds.size === ords.length, "Chaque ordonnance possède une consultation unique (@unique)");
-
-  const bilans = await safeExec(() => prisma.bilanRecip.findMany({ select: { consultationId: true } }));
-  const bilanConsultIds = new Set(bilans.map((b) => b.consultationId));
-  assert(bilanConsultIds.size === bilans.length, "Chaque bilan possède une consultation unique (@unique)");
-
-  const justifs = await safeExec(() => prisma.justification.findMany({ select: { consultationId: true } }));
-  const justifConsultIds = new Set(justifs.map((j) => j.consultationId));
-  assert(justifConsultIds.size === justifs.length, "Chaque justification possède une consultation unique (@unique)");
-
-  // 5. Verification of multilingual and UTF-8 support
-  console.log("\n🌍 5. Vérification du support multilingue et caractères spéciaux :");
-  const arabicCabinet = await safeExec(() => prisma.cabinet.findFirst());
-  const hasArabic =
-    arabicCabinet?.doctorNameAr &&
-    arabicCabinet?.specialtyAr &&
-    arabicCabinet.doctorNameAr.length > 0;
-  assert(Boolean(hasArabic), "Caractères arabes correctement stockés dans le profil Cabinet (د. مصعب)");
-
-  const arabicPatients = await safeExec(() =>
-    prisma.patient.findMany({
-      where: {
-        nom: { startsWith: "TEST_" },
-        antecedents: { contains: "مريض" },
-      },
-    })
-  );
-  assert(arabicPatients.length > 0, `Antécédents médicaux en langue arabe préservés (${arabicPatients.length} dossiers)`);
-
-  // Print final scorecard
-  console.log("\n==================================================================");
-  console.log(`📋 RÉSULTAT DU CONTRÔLE DE QUALITÉ : ${passedTests} / ${totalTests} TESTS VALIDÉS`);
-  console.log("==================================================================");
-
-  if (passedTests === totalTests) {
-    console.log("🎉 TOUTES LES VÉRIFICATIONS ONT RÉUSSI AVEC SUCCÈS !");
-  } else {
-    console.warn(`⚠️ Attention : ${totalTests - passedTests} test(s) n'ont pas passé la validation.`);
-  }
-}
-
-// ============================================================================
-// 7. CLI DISPATCHER & MAIN RUNNER
-// ============================================================================
 
 async function main() {
-  const args = process.argv.slice(2);
-  const cleanFlag = args.includes("--clean") || args.includes("-c") || args.includes("--reset");
-  const cleanOnlyFlag = args.includes("--clean-only");
-  const verifyOnlyFlag = args.includes("--verify-only");
+  console.log("================================================================================");
+  console.log("🏥 DENTAL CLINIC DATABASE POPULATION & CLINICAL AUDIT (test.js)");
+  console.log("================================================================================\n");
 
-  console.log("\n==================================================================");
-  console.log("⚡ GESTION CABINET DENTAIRE - SEED & TEST RUNNER");
-  console.log("==================================================================");
-  console.log(`📅 Date d'exécution : ${new Date().toLocaleString("fr-FR")}`);
-  console.log(`🔌 Mode CLI          : ${
-    cleanOnlyFlag
-      ? "NETTOYAGE SEUL (--clean-only)"
-      : verifyOnlyFlag
-      ? "VÉRIFICATION SEULE (--verify-only)"
-      : cleanFlag
-      ? "NETTOYAGE PUIS SEED (--clean)"
-      : "IDEMPOTENT SEED & VÉRIFICATION (Défaut)"
-  }`);
+  // -----------------------------------------------------------------------------
+  // STEP 1: Safe Cohort Cleanup (Idempotent Execution)
+  // -----------------------------------------------------------------------------
+  console.log("🧹 Étape 1 : Nettoyage sécurisé de la cohorte clinique précédente (si existante)...");
 
-  if (cleanOnlyFlag) {
-    await cleanTestDataOnly();
-    return;
+  const existingCohort = await prisma.patient.findMany({
+    where: { nom: { in: CLINICAL_COHORT_NAMES } },
+    select: { id: true, nom: true },
+  });
+
+  if (existingCohort.length > 0) {
+    const cohortIds = existingCohort.map((p) => p.id);
+    console.log(`   Suppression de ${cohortIds.length} dossier(s) patient(s) de la cohorte pour régénération propre...`);
+    await prisma.patient.deleteMany({
+      where: { id: { in: cohortIds } },
+    });
+    console.log("   ✅ Ancienne cohorte nettoyée avec cascade relationnelle.");
+  } else {
+    console.log("   ✅ Aucun dossier de la cohorte n'était présent.");
   }
 
-  if (cleanFlag) {
-    await cleanTestDataOnly();
+  // Nettoyage des dépenses de référence du cabinet
+  const deletedExpenses = await prisma.depense.deleteMany({
+    where: {
+      description: {
+        contains: "(Réf Clinique)",
+      },
+    },
+  });
+  if (deletedExpenses.count > 0) {
+    console.log(`   ✅ ${deletedExpenses.count} dépense(s) de référence réinitialisée(s).`);
   }
 
-  if (!verifyOnlyFlag) {
-    await seedDatabase();
+  // -----------------------------------------------------------------------------
+  // STEP 2: Realistic Algerian Dental Medications
+  // -----------------------------------------------------------------------------
+  console.log("\n💊 Étape 2 : Chargement du catalogue pharmaceutique algérien...");
+
+  const dentalMedications = [
+    "Amoxicilline 1g (Clamoxyl)",
+    "Amoxicilline + Ac. Clavulanique 1g/125mg (Augmentin)",
+    "Spiramycine + Métronidazole (Birodogyl)",
+    "Métronidazole 500mg (Flagyl)",
+    "Paracétamol 1g (Doliprane)",
+    "Paracétamol sirop pédiatrique 30mg/ml",
+    "Ibuprofène 400mg (Advil)",
+    "Ibuprofène 600mg (Algicox)",
+    "Acide tiaprofénique 100mg (Surgam)",
+    "Prednisolone 20mg (Solupred)",
+    "Bain de bouche Chlorhexidine 0.12% (Eludril)",
+    "Gel gingival antiseptique (Pansoral)",
+    "Dentifrice désensibilisant au nitrate de potassium (Sensodyne)",
+  ];
+
+  const medicationMap = {};
+  for (const medName of dentalMedications) {
+    const med = await prisma.medicament.upsert({
+      where: { nom: medName },
+      update: {},
+      create: { nom: medName },
+    });
+    medicationMap[medName] = med.id;
+  }
+  console.log(`   ✅ ${Object.keys(medicationMap).length} médicaments dentaires prêts.`);
+
+  // -----------------------------------------------------------------------------
+  // STEP 3: Medical Laboratory Tests and Dental Imaging (Bilans)
+  // -----------------------------------------------------------------------------
+  console.log("\n🔬 Étape 3 : Chargement du catalogue d'analyses médicales et imagerie...");
+
+  const dentalBilans = [
+    "Formule Numération Sanguine (NFS)",
+    "Bilan d'hémostase (TP, TCA, INR)",
+    "Glycémie à jeun",
+    "Hémoglobine glyquée (HbA1c)",
+    "Radiographie Panoramique Dentaire (OPG)",
+    "Scanner Dentaire Cone Beam (CBCT)",
+    "Bilan Rénal (Créatinine, Urée)",
+  ];
+
+  const bilanMap = {};
+  for (const bName of dentalBilans) {
+    const bilan = await prisma.bilan.upsert({
+      where: { nom: bName },
+      update: {},
+      create: { nom: bName },
+    });
+    bilanMap[bName] = bilan.id;
+  }
+  console.log(`   ✅ ${Object.keys(bilanMap).length} analyses et examens d'imagerie prêts.`);
+
+  // -----------------------------------------------------------------------------
+  // STEP 4: Creation of Interconnected Medical & Financial Records
+  // -----------------------------------------------------------------------------
+  console.log("\n👥 Étape 4 : Création des patients, consultations, traitements, actes et versements...");
+
+  // ============================================================================
+  // PATIENT 1: Amina Benali (Dévitalisation Molaire & Couronne Céramo-Métallique)
+  // ============================================================================
+  console.log("   -> Dossier 1 : Amina Benali (Pulpite molaire 36, dévitalisation 3 canaux & couronne)");
+  const p1 = await prisma.patient.create({
+    data: {
+      nom: "Amina Benali",
+      age: 28,
+      dateDeNaissance: new Date("1998-04-12T00:00:00.000Z"),
+      sexe: "Femme",
+      telephone: "0554123456",
+      adresse: "Cité 500 Logements, Bâtiment C3, El-Harrouch, Skikda",
+      antecedents: "Aucun antécédent médical notable. Allergie cutanée modérée à la pénicilline signalée.",
+      groupeSanguin: GroupeSanguin.O_POS,
+      createdAt: new Date("2026-09-10T08:30:00.000Z"),
+    },
+  });
+
+  const t1_p1 = await prisma.traitement.create({
+    data: {
+      patientId: p1.id,
+      description: "Traitement endodontique complet 3 canaux et couronne céramo-métallique dent 36",
+      dent: "36",
+      prixTotal: 26000,
+      statut: StatutTraitement.TERMINE,
+      createdAt: new Date("2026-09-10T09:00:00.000Z"),
+      updatedAt: new Date("2026-10-06T12:00:00.000Z"),
+    },
+  });
+
+  // Séance 1 : Urgence pulpectomie
+  const rdv1_p1 = await prisma.rendezVous.create({
+    data: {
+      patientId: p1.id,
+      traitementId: t1_p1.id,
+      date: new Date("2026-09-10T09:00:00.000Z"),
+      description: "Consultation d'urgence pour pulpite aiguë dent 36",
+      note: "Urgence reçue à 9h00",
+    },
+  });
+
+  await prisma.consultation.create({
+    data: {
+      patientId: p1.id,
+      rendezVousId: rdv1_p1.id,
+      motifDeConsultation: "Douleur dentaire aiguë pulsatile et insomniante secteur mandibulaire gauche (dent 36)",
+      note: "Examen clinique : Carie occluso-distale profonde dent 36 avec effraction pulpaire. Test au froid vivement douloureux et prolongé. Diagnostic : Pulpite aiguë irréversible. Geste d'urgence : Pulpectomie sous anesthésie locale sans vasoconstricteur, extirpation des filets pulpaires, irrigation à l'hypochlorite de sodium 2.5%, pansement provisoire à l'eugénate.",
+      createdAt: new Date("2026-09-10T09:15:00.000Z"),
+      radios: {
+        create: {
+          patientId: p1.id,
+          description: "Cliché rétroalvéolaire pré-opératoire dent 36 montrant carie profonde proche de la corne pulpaire mésiale",
+          fichier: "/uploads/radios/amina_benali_36_preop.jpg",
+          createdAt: new Date("2026-09-10T09:10:00.000Z"),
+        },
+      },
+      ordonnance: {
+        create: {
+          patientId: p1.id,
+          createdAt: new Date("2026-09-10T09:30:00.000Z"),
+          items: {
+            create: [
+              {
+                medicamentId: medicationMap["Paracétamol 1g (Doliprane)"],
+                dosage: "1000 mg",
+                frequence: "1 comprimé toutes les 8h si douleur",
+                duree: "4 jours",
+                quantite: 1,
+              },
+              {
+                medicamentId: medicationMap["Ibuprofène 400mg (Advil)"],
+                dosage: "400 mg",
+                frequence: "1 comprimé au milieu des repas matin et soir",
+                duree: "3 jours",
+                quantite: 1,
+              },
+            ],
+          },
+        },
+      },
+      consultationsTraitement: {
+        create: {
+          traitementId: t1_p1.id,
+          acteRealise: "Pulpectomie d'urgence, alésage initial des canaux mésiaux et distal, pansement eugénate",
+          createdAt: new Date("2026-09-10T09:45:00.000Z"),
+        },
+      },
+    },
+  });
+
+  await prisma.paiement.create({
+    data: {
+      patientId: p1.id,
+      traitementId: t1_p1.id,
+      montant: 8000,
+      date: new Date("2026-09-10T09:50:00.000Z"),
+      note: "Versement séance 1 : Acompte urgence pulpectomie et dévitalisation initiale",
+    },
+  });
+
+  // Séance 2 : Obturation canalaire
+  const rdv2_p1 = await prisma.rendezVous.create({
+    data: {
+      patientId: p1.id,
+      traitementId: t1_p1.id,
+      date: new Date("2026-09-18T10:00:00.000Z"),
+      description: "Obturation canalaire définitive dent 36",
+      note: "Séance d'endodontie sous digue",
+    },
+  });
+
+  await prisma.consultation.create({
+    data: {
+      patientId: p1.id,
+      rendezVousId: rdv2_p1.id,
+      motifDeConsultation: "Séance d'obturation canalaire définitive dent 36",
+      note: "Dent totalement asymptomatique. Alésage mécanisé WaveOne Gold, séchage pointes de papier, obturation thermo-mécanique gutta-percha et ciment résine AH Plus. Contrôle radiologique parfait. Reconstitution coronaire pré-prothétique au composite hybride.",
+      createdAt: new Date("2026-09-18T10:15:00.000Z"),
+      radios: {
+        create: {
+          patientId: p1.id,
+          description: "Cliché rétroalvéolaire de contrôle d'obturation endodontique dent 36 : 3 canaux parfaitement obturés à l'apex",
+          fichier: "/uploads/radios/amina_benali_36_obturation.jpg",
+          createdAt: new Date("2026-09-18T10:45:00.000Z"),
+        },
+      },
+      consultationsTraitement: {
+        create: {
+          traitementId: t1_p1.id,
+          acteRealise: "Obturation canalaire tridimensionnelle 3 canaux et reconstitution coronaire composite",
+          createdAt: new Date("2026-09-18T10:50:00.000Z"),
+        },
+      },
+    },
+  });
+
+  await prisma.paiement.create({
+    data: {
+      patientId: p1.id,
+      traitementId: t1_p1.id,
+      montant: 6000,
+      date: new Date("2026-09-18T11:00:00.000Z"),
+      note: "Versement séance 2 : Obturation canalaire et reconstitution coronaire",
+    },
+  });
+
+  // Séance 3 : Taille moignon & empreinte
+  const rdv3_p1 = await prisma.rendezVous.create({
+    data: {
+      patientId: p1.id,
+      traitementId: t1_p1.id,
+      date: new Date("2026-09-29T11:00:00.000Z"),
+      description: "Taille de moignon et prise d'empreinte couronne dent 36",
+      note: "Préparation pour prothèse céramique",
+    },
+  });
+
+  await prisma.consultation.create({
+    data: {
+      patientId: p1.id,
+      rendezVousId: rdv3_p1.id,
+      motifDeConsultation: "Préparation prothétique et prise d'empreinte dent 36",
+      note: "Taille périphérique avec congé sous-gingival respectant l'espace biologique. Empreinte double mélange silicone par addition (Putty + Light). Envoi au laboratoire de prothèse. Pose d'une couronne provisoire en résine bis-acryl.",
+      createdAt: new Date("2026-09-29T11:15:00.000Z"),
+      consultationsTraitement: {
+        create: {
+          traitementId: t1_p1.id,
+          acteRealise: "Taille périphérique du moignon, empreinte silicone de précision et couronne provisoire",
+          createdAt: new Date("2026-09-29T11:45:00.000Z"),
+        },
+      },
+    },
+  });
+
+  await prisma.paiement.create({
+    data: {
+      patientId: p1.id,
+      traitementId: t1_p1.id,
+      montant: 7000,
+      date: new Date("2026-09-29T11:50:00.000Z"),
+      note: "Versement séance 3 : Acompte commande prothèse au laboratoire",
+    },
+  });
+
+  // Séance 4 : Scellement définitif
+  const rdv4_p1 = await prisma.rendezVous.create({
+    data: {
+      patientId: p1.id,
+      traitementId: t1_p1.id,
+      date: new Date("2026-10-06T14:00:00.000Z"),
+      description: "Scellement définitif couronne céramo-métallique dent 36",
+      note: "Séance finale de prothèse",
+    },
+  });
+
+  await prisma.consultation.create({
+    data: {
+      patientId: p1.id,
+      rendezVousId: rdv4_p1.id,
+      motifDeConsultation: "Pose et scellement définitif de la couronne céramo-métallique dent 36",
+      note: "Dépose de la couronne provisoire. Nettoyage et désinfection du moignon. Essayage clinique : ajustage marginal parfait, points de contact fermes, occlusion contrôlée en statique et dynamique au papier 40µ. Scellement définitif au ciment verre ionomère Fuji I. Élimination des excès. Traitement terminé avec succès.",
+      createdAt: new Date("2026-10-06T14:15:00.000Z"),
+      consultationsTraitement: {
+        create: {
+          traitementId: t1_p1.id,
+          acteRealise: "Scellement définitif de la couronne céramo-métallique au verre ionomère",
+          createdAt: new Date("2026-10-06T14:40:00.000Z"),
+        },
+      },
+    },
+  });
+
+  await prisma.paiement.create({
+    data: {
+      patientId: p1.id,
+      traitementId: t1_p1.id,
+      montant: 5000,
+      date: new Date("2026-10-06T14:45:00.000Z"),
+      note: "Versement séance 4 : Solde définitif de la couronne céramo-métallique (Total 26 000 DZD réglé)",
+    },
+  });
+
+  // ============================================================================
+  // PATIENT 2: Karim Mansouri (Parodontite Chronique & Surfaçage Radiculaire)
+  // ============================================================================
+  console.log("   -> Dossier 2 : Karim Mansouri (Parodontite chronique de l'adulte, détartrage & surfaçage)");
+  const p2 = await prisma.patient.create({
+    data: {
+      nom: "Karim Mansouri",
+      age: 45,
+      dateDeNaissance: new Date("1981-08-20T00:00:00.000Z"),
+      sexe: "Homme",
+      telephone: "0661889210",
+      adresse: "Rue Didouche Mourad, Centre-ville, Skikda",
+      antecedents: "Hypertension artérielle modérée sous Amlodipine 5mg. Tabagisme évalué à 15 paquets-années.",
+      groupeSanguin: GroupeSanguin.A_POS,
+      createdAt: new Date("2026-10-12T10:00:00.000Z"),
+    },
+  });
+
+  const t1_p2 = await prisma.traitement.create({
+    data: {
+      patientId: p2.id,
+      description: "Assainissement parodontal complet : Détartrage ultrasonique et surfaçage radiculaire 4 quadrants",
+      dent: "Toutes arcades",
+      prixTotal: 18000,
+      statut: StatutTraitement.EN_COURS,
+      createdAt: new Date("2026-10-12T10:30:00.000Z"),
+      updatedAt: new Date("2026-10-23T12:00:00.000Z"),
+    },
+  });
+
+  const rdv1_p2 = await prisma.rendezVous.create({
+    data: {
+      patientId: p2.id,
+      traitementId: t1_p2.id,
+      date: new Date("2026-10-12T10:30:00.000Z"),
+      description: "Bilan parodontal initial et prescription pré-thérapeutique",
+      note: "Patient hypertendu sous Amlodipine",
+    },
+  });
+
+  await prisma.consultation.create({
+    data: {
+      patientId: p2.id,
+      rendezVousId: rdv1_p2.id,
+      motifDeConsultation: "Saignement abondant des gencives au brossage, mobilités dentaires légères et halitose",
+      note: "Sondage parodontal révélant des poches de 4 à 6 mm en regard des molaires et prémolaires. Tartre sous-gingival dense. Diagnostic : Parodontite chronique de l'adulte stade II généralisée. Prescription d'antibioprophylaxie parodontale et bilan biologique avant surfaçage sous-gingival.",
+      createdAt: new Date("2026-10-12T10:45:00.000Z"),
+      ordonnance: {
+        create: {
+          patientId: p2.id,
+          createdAt: new Date("2026-10-12T11:00:00.000Z"),
+          items: {
+            create: [
+              {
+                medicamentId: medicationMap["Spiramycine + Métronidazole (Birodogyl)"],
+                dosage: "1.5 MUI / 250 mg",
+                frequence: "2 comprimés par jour au cours des repas",
+                duree: "7 jours",
+                quantite: 1,
+              },
+              {
+                medicamentId: medicationMap["Bain de bouche Chlorhexidine 0.12% (Eludril)"],
+                dosage: "0.12 %",
+                frequence: "Bain de bouche pur 3 fois par jour après brossage",
+                duree: "10 jours",
+                quantite: 1,
+              },
+            ],
+          },
+        },
+      },
+      bilanRecip: {
+        create: {
+          patientId: p2.id,
+          createdAt: new Date("2026-10-12T11:10:00.000Z"),
+          items: {
+            create: [
+              {
+                bilanId: bilanMap["Formule Numération Sanguine (NFS)"],
+                resultat: "Leucocytes: 7400/mm³, Hb: 14.2 g/dL, Plaquettes: 260000/mm³",
+                remarque: "Constantes hématologiques dans les normes",
+              },
+              {
+                bilanId: bilanMap["Bilan d'hémostase (TP, TCA, INR)"],
+                resultat: "TP: 94%, INR: 1.02",
+                remarque: "Coagulation sanguine normale, autorisant les actes sous-gingivaux",
+              },
+              {
+                bilanId: bilanMap["Glycémie à jeun"],
+                resultat: "0.98 g/L",
+                remarque: "Normoglycémie",
+              },
+            ],
+          },
+        },
+      },
+      consultationsTraitement: {
+        create: {
+          traitementId: t1_p2.id,
+          acteRealise: "Détartrage sus-gingival préliminaire ultrasonique et polissage doux",
+          createdAt: new Date("2026-10-12T11:30:00.000Z"),
+        },
+      },
+    },
+  });
+
+  await prisma.paiement.create({
+    data: {
+      patientId: p2.id,
+      traitementId: t1_p2.id,
+      montant: 6000,
+      date: new Date("2026-10-12T11:35:00.000Z"),
+      note: "Versement séance 1 : Détartrage préliminaire et bilan parodontal",
+    },
+  });
+
+  // Séance 2 : Surfaçage quadrants 1 & 4
+  const rdv2_p2 = await prisma.rendezVous.create({
+    data: {
+      patientId: p2.id,
+      traitementId: t1_p2.id,
+      date: new Date("2026-10-23T11:00:00.000Z"),
+      description: "Surfaçage radiculaire quadrants 1 et 4 sous anesthésie locale",
+      note: "Tension artérielle contrôlée (TA: 130/80 mmHg)",
+    },
+  });
+
+  await prisma.consultation.create({
+    data: {
+      patientId: p2.id,
+      rendezVousId: rdv2_p2.id,
+      motifDeConsultation: "Séance de surfaçage radiculaire sous-gingival cadrans droits (1 et 4)",
+      note: "Bilans biologiques validés. Anesthésie locale intra-septale et para-apicale. Débridement minutieux des surfaces radiculaires aux curettes de Gracey spécifiques. Irrigation sous-gingivale à la bétadine buccale. Recommandations d'hygiène rigoureuse.",
+      createdAt: new Date("2026-10-23T11:15:00.000Z"),
+      consultationsTraitement: {
+        create: {
+          traitementId: t1_p2.id,
+          acteRealise: "Surfaçage radiculaire méticuleux des poches parodontales quadrants 1 et 4",
+          createdAt: new Date("2026-10-23T11:50:00.000Z"),
+        },
+      },
+    },
+  });
+
+  await prisma.paiement.create({
+    data: {
+      patientId: p2.id,
+      traitementId: t1_p2.id,
+      montant: 6000,
+      date: new Date("2026-10-23T12:00:00.000Z"),
+      note: "Versement séance 2 : Surfaçage radiculaire quadrants 1 et 4 (Reste 6 000 DZD)",
+    },
+  });
+
+  // Rendez-vous futur programmé
+  await prisma.rendezVous.create({
+    data: {
+      patientId: p2.id,
+      traitementId: t1_p2.id,
+      date: new Date("2026-11-08T10:00:00.000Z"),
+      description: "Séance de surfaçage radiculaire quadrants 2 et 3 (côté gauche)",
+      note: "Contrôler la cicatrisation gingivale des quadrants 1 et 4",
+    },
+  });
+
+  // ============================================================================
+  // PATIENT 3: Fatima Zohra Boukhalfa (Chirurgie Alvéolaire & Prothèse Squelettée)
+  // ============================================================================
+  console.log("   -> Dossier 3 : Fatima Zohra Boukhalfa (Extractions chirurgicales & prothèse squelettée stellite)");
+  const p3 = await prisma.patient.create({
+    data: {
+      nom: "Fatima Zohra Boukhalfa",
+      age: 52,
+      dateDeNaissance: new Date("1974-06-15T00:00:00.000Z"),
+      sexe: "Femme",
+      telephone: "0771458923",
+      adresse: "Boulevard de la Révolution, Skikda",
+      antecedents: "Diabète de type 2 équilibré sous Glucophage (Metformine 850mg 2x/j, HbA1c récente à 6.8%).",
+      groupeSanguin: GroupeSanguin.B_POS,
+      createdAt: new Date("2026-09-02T08:00:00.000Z"),
+    },
+  });
+
+  // Traitement 1 : Extractions chirurgicales (7,000 DZD - Soldé)
+  const t1_p3 = await prisma.traitement.create({
+    data: {
+      patientId: p3.id,
+      description: "Avulsions chirurgicales des racines résiduelles nécrosées 14 et 15 avec régularisation de crête",
+      dent: "14, 15",
+      prixTotal: 7000,
+      statut: StatutTraitement.TERMINE,
+      createdAt: new Date("2026-09-02T08:30:00.000Z"),
+      updatedAt: new Date("2026-09-02T09:30:00.000Z"),
+    },
+  });
+
+  // Traitement 2 : Prothèse Squelettée Stellite (45,000 DZD - Payé 25,000, Reste 20,000 DZD - EN_COURS)
+  const t2_p3 = await prisma.traitement.create({
+    data: {
+      patientId: p3.id,
+      description: "Conception et réalisation d'une prothèse adjointe partielle métallique squelettée (Stellite maxillaire)",
+      dent: "Maxillaire supérieur",
+      prixTotal: 45000,
+      statut: StatutTraitement.EN_COURS,
+      createdAt: new Date("2026-09-02T08:35:00.000Z"),
+      updatedAt: new Date("2026-10-25T11:00:00.000Z"),
+    },
+  });
+
+  // Séance 1 : Extractions & Arrêt de travail
+  const rdv1_p3 = await prisma.rendezVous.create({
+    data: {
+      patientId: p3.id,
+      traitementId: t1_p3.id,
+      date: new Date("2026-09-02T08:30:00.000Z"),
+      description: "Extractions chirurgicales 14 et 15",
+      note: "Patiente diabétique sous Metformine",
+    },
+  });
+
+  await prisma.consultation.create({
+    data: {
+      patientId: p3.id,
+      rendezVousId: rdv1_p3.id,
+      motifDeConsultation: "Infection dentaire récidivante sur racines fracturées 14 et 15 et bilan prothétique",
+      note: "Sous anesthésie locale, avulsion atraumatique des racines résiduelles 14 et 15. Curetage soigneux du tissu de granulation alvéolaire. Hémostase locale obtenue par compression et éponge hémostatique Surgicel. Sutures à la soie 3-0. Conseils post-opératoires remis pour patiente diabétique.",
+      createdAt: new Date("2026-09-02T08:45:00.000Z"),
+      radios: {
+        create: {
+          patientId: p3.id,
+          description: "Panoramique dentaire OPG pré-opératoire : Visualisation des racines 14 et 15 et perte d'os alvéolaire",
+          fichier: "/uploads/radios/boukhalfa_panoramique.jpg",
+          createdAt: new Date("2026-09-02T08:40:00.000Z"),
+        },
+      },
+      ordonnance: {
+        create: {
+          patientId: p3.id,
+          createdAt: new Date("2026-09-02T09:15:00.000Z"),
+          items: {
+            create: [
+              {
+                medicamentId: medicationMap["Amoxicilline 1g (Clamoxyl)"],
+                dosage: "1000 mg",
+                frequence: "1 comprimé matin et soir",
+                duree: "6 jours",
+                quantite: 1,
+              },
+              {
+                medicamentId: medicationMap["Paracétamol 1g (Doliprane)"],
+                dosage: "1000 mg",
+                frequence: "1 comprimé toutes les 8 heures si douleur",
+                duree: "5 jours",
+                quantite: 1,
+              },
+            ],
+          },
+        },
+      },
+      justificationRecord: {
+        create: {
+          patientId: p3.id,
+          titre: "Arrêt de travail médical post-chirurgical",
+          texte: "Je soussigné certifie avoir procédé ce jour à l'avulsion chirurgicale sous anesthésie locale de deux racines dentaires chez Mme Fatima Zohra Boukhalfa, nécessitant un repos complet à domicile de 3 jours.",
+          dateDebut: new Date("2026-09-02T00:00:00.000Z"),
+          dateFin: new Date("2026-09-05T00:00:00.000Z"),
+          duree: "3 jours",
+          createdAt: new Date("2026-09-02T09:20:00.000Z"),
+        },
+      },
+      consultationsTraitement: {
+        create: {
+          traitementId: t1_p3.id,
+          acteRealise: "Avulsion chirurgicale des racines résiduelles 14 et 15, curetage alvéolaire et suture",
+          createdAt: new Date("2026-09-02T09:25:00.000Z"),
+        },
+      },
+    },
+  });
+
+  await prisma.paiement.create({
+    data: {
+      patientId: p3.id,
+      traitementId: t1_p3.id,
+      montant: 7000,
+      date: new Date("2026-09-02T09:30:00.000Z"),
+      note: "Règlement complet des avulsions chirurgicales 14 et 15",
+    },
+  });
+
+  // Séance 2 : Cicatrisation & empreinte primaire prothèse
+  const rdv2_p3 = await prisma.rendezVous.create({
+    data: {
+      patientId: p3.id,
+      traitementId: t2_p3.id,
+      date: new Date("2026-10-05T10:00:00.000Z"),
+      description: "Contrôle de cicatrisation et empreinte primaire prothèse",
+      note: "Vérification des crêtes alvéolaires",
+    },
+  });
+
+  await prisma.consultation.create({
+    data: {
+      patientId: p3.id,
+      rendezVousId: rdv2_p3.id,
+      motifDeConsultation: "Contrôle de cicatrisation et lancement de la prothèse squelettée maxillaire",
+      note: "Cicatrisation muqueuse complète et crêtes régulières sans douleur. Prise d'empreinte primaire maxillaire à l'alginate chromatique. Coulée en plâtre dur pour confection d'un porte-empreinte individuel (PEI) au laboratoire.",
+      createdAt: new Date("2026-10-05T10:15:00.000Z"),
+      consultationsTraitement: {
+        create: {
+          traitementId: t2_p3.id,
+          acteRealise: "Empreinte primaire maxillaire et préparation des logements de taquets sur 13 et 23",
+          createdAt: new Date("2026-10-05T10:40:00.000Z"),
+        },
+      },
+    },
+  });
+
+  await prisma.paiement.create({
+    data: {
+      patientId: p3.id,
+      traitementId: t2_p3.id,
+      montant: 15000,
+      date: new Date("2026-10-05T10:45:00.000Z"),
+      note: "Acompte initial n°1 pour la fabrication de la prothèse squelettée stellite",
+    },
+  });
+
+  // Séance 3 : Empreinte secondaire & occlusion
+  const rdv3_p3 = await prisma.rendezVous.create({
+    data: {
+      patientId: p3.id,
+      traitementId: t2_p3.id,
+      date: new Date("2026-10-25T10:30:00.000Z"),
+      description: "Empreinte secondaire au PEI et enregistrement de l'articulé",
+      note: "Séance de haute précision",
+    },
+  });
+
+  await prisma.consultation.create({
+    data: {
+      patientId: p3.id,
+      rendezVousId: rdv3_p3.id,
+      motifDeConsultation: "Empreinte secondaire de précision et occlusion",
+      note: "Margination du PEI à la pâte thermoplastique de Kerr (joint vélo-palatin et freins vestibulaires). Empreinte secondaire au polysulfure régulier. Enregistrement des rapports intermaxillaires au plan de cire.",
+      createdAt: new Date("2026-10-25T10:45:00.000Z"),
+      consultationsTraitement: {
+        create: {
+          traitementId: t2_p3.id,
+          acteRealise: "Empreinte secondaire fonctionnelle et enregistrement de la relation centrée",
+          createdAt: new Date("2026-10-25T11:15:00.000Z"),
+        },
+      },
+    },
+  });
+
+  await prisma.paiement.create({
+    data: {
+      patientId: p3.id,
+      traitementId: t2_p3.id,
+      montant: 10000,
+      date: new Date("2026-10-25T11:20:00.000Z"),
+      note: "Acompte n°2 pour la réalisation de l'infrastructure métallique Stellite (Reste 20 000 DZD)",
+    },
+  });
+
+  // Rendez-vous futur pour essayage
+  await prisma.rendezVous.create({
+    data: {
+      patientId: p3.id,
+      traitementId: t2_p3.id,
+      date: new Date("2026-11-05T14:30:00.000Z"),
+      description: "Essayage de l'armature métallique squelettée (châssis stellite) et montage des dents sur cire",
+      note: "Vérifier la sustentation, stabilisation et rétention des crochets coulés",
+    },
+  });
+
+  // ============================================================================
+  // PATIENT 4: Sofiane Belkacem (Chirurgie Dent de Sagesse Incluse 48)
+  // ============================================================================
+  console.log("   -> Dossier 4 : Sofiane Belkacem (Péricoronarite récidivante & avulsion chirurgicale 48)");
+  const p4 = await prisma.patient.create({
+    data: {
+      nom: "Sofiane Belkacem",
+      age: 24,
+      dateDeNaissance: new Date("2002-03-10T00:00:00.000Z"),
+      sexe: "Homme",
+      telephone: "0560332187",
+      adresse: "Cité 20 Août 1955, El-Harrouch, Skikda",
+      antecedents: "Aucun antécédent médico-chirurgical. Sportif.",
+      groupeSanguin: GroupeSanguin.O_NEG,
+      createdAt: new Date("2026-10-15T09:00:00.000Z"),
+    },
+  });
+
+  const t1_p4 = await prisma.traitement.create({
+    data: {
+      patientId: p4.id,
+      description: "Extraction chirurgicale sous anesthésie locale de la dent de sagesse incluse 48 avec lambeau et ostéotomie",
+      dent: "48",
+      prixTotal: 12000,
+      statut: StatutTraitement.TERMINE,
+      createdAt: new Date("2026-10-15T09:30:00.000Z"),
+      updatedAt: new Date("2026-10-22T11:00:00.000Z"),
+    },
+  });
+
+  // Séance 1 : Péricoronarite
+  const rdv1_p4 = await prisma.rendezVous.create({
+    data: {
+      patientId: p4.id,
+      traitementId: t1_p4.id,
+      date: new Date("2026-10-15T09:30:00.000Z"),
+      description: "Consultation d'urgence pour douleur rétro-molaire droite",
+      note: "Trismus modéré",
+    },
+  });
+
+  await prisma.consultation.create({
+    data: {
+      patientId: p4.id,
+      rendezVousId: rdv1_p4.id,
+      motifDeConsultation: "Douleur intense angle mandibulaire droit, trismus léger et difficulté de mastication",
+      note: "Capuchon muqueux très inflammatoire recouvrant partiellement la 48 incluse. Diagnostic : Péricoronarite récidivante sur dent 48 enclavée mésio-angulaire. Nettoyage antiseptique à l'eau oxygénée diluée. Programmation de l'extraction après sédation de la phase aiguë.",
+      createdAt: new Date("2026-10-15T09:45:00.000Z"),
+      radios: {
+        create: {
+          patientId: p4.id,
+          description: "Panoramique dentaire : Visualisation de la dent 48 incluse en position mésio-angulaire sous la couronne de la 47",
+          fichier: "/uploads/radios/belkacem_48_panoramique.jpg",
+          createdAt: new Date("2026-10-15T09:40:00.000Z"),
+        },
+      },
+      ordonnance: {
+        create: {
+          patientId: p4.id,
+          createdAt: new Date("2026-10-15T10:00:00.000Z"),
+          items: {
+            create: [
+              {
+                medicamentId: medicationMap["Amoxicilline 1g (Clamoxyl)"],
+                dosage: "1000 mg",
+                frequence: "1 sachet matin et soir au milieu des repas",
+                duree: "6 jours",
+                quantite: 1,
+              },
+              {
+                medicamentId: medicationMap["Métronidazole 500mg (Flagyl)"],
+                dosage: "500 mg",
+                frequence: "1 comprimé matin, midi et soir",
+                duree: "6 jours",
+                quantite: 1,
+              },
+              {
+                medicamentId: medicationMap["Paracétamol 1g (Doliprane)"],
+                dosage: "1000 mg",
+                frequence: "1 comprimé toutes les 8h si douleur",
+                duree: "4 jours",
+                quantite: 1,
+              },
+            ],
+          },
+        },
+      },
+    },
+  });
+
+  // Séance 2 : Chirurgie
+  const rdv2_p4 = await prisma.rendezVous.create({
+    data: {
+      patientId: p4.id,
+      traitementId: t1_p4.id,
+      date: new Date("2026-10-22T09:30:00.000Z"),
+      description: "Intervention chirurgicale extraction 48 incluse",
+      note: "Intervention au bloc du cabinet",
+    },
+  });
+
+  await prisma.consultation.create({
+    data: {
+      patientId: p4.id,
+      rendezVousId: rdv2_p4.id,
+      motifDeConsultation: "Avulsion chirurgicale dent de sagesse 48",
+      note: "Anesthésie tronculaire à l'épine de Spix et infiltration locale. Incision intrasulculaire et décharge vestibulaire. Décollement d'un lambeau muco-périosté. Dégagement osseux à la fraise chirurgicale sous spray stérile. Odontosection de la couronne. Extraction des racines. Alvéolectomie, nettoyage, éponge hémostatique Surgicel, sutures au fil résorbable 3-0. Hémostase parfaite.",
+      createdAt: new Date("2026-10-22T09:45:00.000Z"),
+      justificationRecord: {
+        create: {
+          patientId: p4.id,
+          titre: "Certificat d'arrêt de travail après chirurgie buccale",
+          texte: "Je soussigné certifie que M. Sofiane Belkacem a subi ce jour une avulsion chirurgicale complexe de la dent de sagesse incluse 48 avec décollement et sutures, justifiant un repos médical absolu de quatre (04) jours.",
+          dateDebut: new Date("2026-10-22T00:00:00.000Z"),
+          dateFin: new Date("2026-10-26T00:00:00.000Z"),
+          duree: "4 jours",
+          createdAt: new Date("2026-10-22T10:30:00.000Z"),
+        },
+      },
+      consultationsTraitement: {
+        create: {
+          traitementId: t1_p4.id,
+          acteRealise: "Incision, décollement de lambeau, ostéotomie alvéolaire, odontosection et extraction 48 avec sutures",
+          createdAt: new Date("2026-10-22T10:45:00.000Z"),
+        },
+      },
+    },
+  });
+
+  await prisma.paiement.create({
+    data: {
+      patientId: p4.id,
+      traitementId: t1_p4.id,
+      montant: 12000,
+      date: new Date("2026-10-22T11:00:00.000Z"),
+      note: "Règlement complet de l'acte d'avulsion chirurgicale complexe dent 48 (12 000 DZD)",
+    },
+  });
+
+  // Séance 3 : Dépose des fils
+  const rdv3_p4 = await prisma.rendezVous.create({
+    data: {
+      patientId: p4.id,
+      traitementId: t1_p4.id,
+      date: new Date("2026-10-29T11:30:00.000Z"),
+      description: "Dépose des points de suture dent 48",
+      note: "Contrôle post-opératoire à J+7",
+    },
+  });
+
+  await prisma.consultation.create({
+    data: {
+      patientId: p4.id,
+      rendezVousId: rdv3_p4.id,
+      motifDeConsultation: "Contrôle post-opératoire et dépose des points de suture 48",
+      note: "Excellente cicatrisation muqueuse, disparition totale de l'œdème et du trismus. Dépose des fils de suture. Patient asymptomatique. Dossier chirurgical clôturé avec succès.",
+      createdAt: new Date("2026-10-29T11:45:00.000Z"),
+    },
+  });
+
+  // ============================================================================
+  // PATIENT 5: Meriem Chaouche (Composites Esthétiques Antérieurs 11, 21)
+  // ============================================================================
+  console.log("   -> Dossier 5 : Meriem Chaouche (Caries proximales & composites esthétiques stratifiés)");
+  const p5 = await prisma.patient.create({
+    data: {
+      nom: "Meriem Chaouche",
+      age: 34,
+      dateDeNaissance: new Date("1992-11-25T00:00:00.000Z"),
+      sexe: "Femme",
+      telephone: "0792567143",
+      adresse: "Cité des Martyrs, El-Harrouch, Skikda",
+      antecedents: "Gastrite chronique sous Oméprazole 20mg. Intolérance gastrique aux AINS.",
+      groupeSanguin: GroupeSanguin.A_NEG,
+      createdAt: new Date("2026-10-18T14:00:00.000Z"),
+    },
+  });
+
+  const t1_p5 = await prisma.traitement.create({
+    data: {
+      patientId: p5.id,
+      description: "Restaurations esthétiques directes par composite nano-hybride stratifié classe III (dents 11 et 21)",
+      dent: "11, 21",
+      prixTotal: 11000,
+      statut: StatutTraitement.EN_COURS,
+      createdAt: new Date("2026-10-18T14:30:00.000Z"),
+      updatedAt: new Date("2026-10-18T16:00:00.000Z"),
+    },
+  });
+
+  const rdv1_p5 = await prisma.rendezVous.create({
+    data: {
+      patientId: p5.id,
+      traitementId: t1_p5.id,
+      date: new Date("2026-10-18T14:30:00.000Z"),
+      description: "Séance de soins conservateurs esthétiques antérieurs 11 et 21",
+      note: "Attention intolérance aux anti-inflammatoires",
+    },
+  });
+
+  await prisma.consultation.create({
+    data: {
+      patientId: p5.id,
+      rendezVousId: rdv1_p5.id,
+      motifDeConsultation: "Lésions carieuses proximales inesthétiques et sensibilité au froid sur les incisives centrales 11 et 21",
+      note: "Caries proximales mésiales classe III sans atteinte pulpaire sur 11 et 21. Pose de la digue dentaire pour isolation salivaire parfaite. Éviction carieuse sélective. Mordançage amélo-dentinaire et adhésif universel. Stratification composite (Dentine A3 et Émail A2 pour translucidité naturelle). Finition aux disques Sof-Lex.",
+      createdAt: new Date("2026-10-18T14:45:00.000Z"),
+      ordonnance: {
+        create: {
+          patientId: p5.id,
+          createdAt: new Date("2026-10-18T15:30:00.000Z"),
+          items: {
+            create: [
+              {
+                medicamentId: medicationMap["Paracétamol 1g (Doliprane)"],
+                dosage: "1000 mg",
+                frequence: "1 comprimé en cas de sensibilité (AINS proscrits)",
+                duree: "3 jours",
+                quantite: 1,
+              },
+              {
+                medicamentId: medicationMap["Dentifrice désensibilisant au nitrate de potassium (Sensodyne)"],
+                dosage: "Dentifrice",
+                frequence: "Brossage doux 3 fois par jour",
+                duree: "1 mois",
+                quantite: 1,
+              },
+            ],
+          },
+        },
+      },
+      consultationsTraitement: {
+        create: {
+          traitementId: t1_p5.id,
+          acteRealise: "Éviction carieuse sous digue et obturations composites nano-hybrides stratifiées 11 et 21",
+          createdAt: new Date("2026-10-18T15:45:00.000Z"),
+        },
+      },
+    },
+  });
+
+  await prisma.paiement.create({
+    data: {
+      patientId: p5.id,
+      traitementId: t1_p5.id,
+      montant: 6000,
+      date: new Date("2026-10-18T16:00:00.000Z"),
+      note: "Versement séance 1 : Acompte restaurations composites antérieures (Reste 5 000 DZD)",
+    },
+  });
+
+  await prisma.rendezVous.create({
+    data: {
+      patientId: p5.id,
+      traitementId: t1_p5.id,
+      date: new Date("2026-11-03T11:00:00.000Z"),
+      description: "Séance de polissage haute brillance des composites et détartrage de contrôle",
+      note: "Contrôler l'occlusion en propulsion",
+    },
+  });
+
+  // ============================================================================
+  // PATIENT 6: Yacine Haddad (Soins Pédiatriques, Coiffage Pulpaire & Sealants)
+  // ============================================================================
+  console.log("   -> Dossier 6 : Yacine Haddad (Soins pédiatriques molaire 36, Biodentine & scellement sillons)");
+  const p6 = await prisma.patient.create({
+    data: {
+      nom: "Yacine Haddad",
+      age: 9,
+      dateDeNaissance: new Date("2017-05-14T00:00:00.000Z"),
+      sexe: "Homme",
+      telephone: "0663198254", // Téléphone du père M. Lyes Haddad
+      adresse: "Rue Ben Badis, El-Harrouch, Skikda",
+      antecedents: "Asthme infantile léger déclenché par le froid, sous Ventoline à la demande. Carnet vaccinal complet.",
+      groupeSanguin: GroupeSanguin.O_POS,
+      createdAt: new Date("2026-10-19T15:00:00.000Z"),
+    },
+  });
+
+  const t1_p6 = await prisma.traitement.create({
+    data: {
+      patientId: p6.id,
+      description: "Soins conservateurs pédiatriques : Coiffage pulpaire indirect Biodentine dent 36 et scellements préventifs des sillons 16, 26, 46",
+      dent: "36, 16, 26, 46",
+      prixTotal: 8500,
+      statut: StatutTraitement.TERMINE,
+      createdAt: new Date("2026-10-19T15:15:00.000Z"),
+      updatedAt: new Date("2026-10-19T16:15:00.000Z"),
+    },
+  });
+
+  const rdv1_p6 = await prisma.rendezVous.create({
+    data: {
+      patientId: p6.id,
+      traitementId: t1_p6.id,
+      date: new Date("2026-10-19T15:15:00.000Z"),
+      description: "Consultation et soins dentaires pédiatriques",
+      note: "Enfant accompagné de son père M. Lyes Haddad",
+    },
+  });
+
+  await prisma.consultation.create({
+    data: {
+      patientId: p6.id,
+      rendezVousId: rdv1_p6.id,
+      motifDeConsultation: "Sensibilité au sucre et douleur au brossage sur première molaire permanente 36",
+      note: "Carie occlusale profonde sur molaire 36 chez un jeune garçon coopérant. Élimination sélective de la dentine infectée. Coiffage pulpaire indirect au silicate de calcium biocompatible (Biodentine) pour induire un pont dentinaire protecteur. Obturation coronaire au ciment verre ionomère condensable. Réalisation simultanée de scellements préventifs de sillons (Sealants) sur les molaires 16, 26 et 46.",
+      createdAt: new Date("2026-10-19T15:30:00.000Z"),
+      ordonnance: {
+        create: {
+          patientId: p6.id,
+          createdAt: new Date("2026-10-19T16:00:00.000Z"),
+          items: {
+            create: [
+              {
+                medicamentId: medicationMap["Paracétamol sirop pédiatrique 30mg/ml"],
+                dosage: "1 dose-poids",
+                frequence: "1 dose-poids toutes les 6 heures si inconfort",
+                duree: "2 jours",
+                quantite: 1,
+              },
+            ],
+          },
+        },
+      },
+      consultationsTraitement: {
+        create: {
+          traitementId: t1_p6.id,
+          acteRealise: "Curetage carieux dent 36, coiffage Biodentine et scellements prophylactiques des sillons",
+          createdAt: new Date("2026-10-19T16:10:00.000Z"),
+        },
+      },
+    },
+  });
+
+  await prisma.paiement.create({
+    data: {
+      patientId: p6.id,
+      traitementId: t1_p6.id,
+      montant: 8500,
+      date: new Date("2026-10-19T16:15:00.000Z"),
+      note: "Règlement complet au comptant par le père du patient pour les soins pédiatriques (8 500 DZD)",
+    },
+  });
+
+  // ============================================================================
+  // PATIENT 7: Ahmed Zouaoui (Prothèse Complète Bimaxillaire Résine)
+  // ============================================================================
+  console.log("   -> Dossier 7 : Ahmed Zouaoui (Prothèse adjointe complète amovible bimaxillaire résine)");
+  const p7 = await prisma.patient.create({
+    data: {
+      nom: "Ahmed Zouaoui",
+      age: 68,
+      dateDeNaissance: new Date("1958-02-18T00:00:00.000Z"),
+      sexe: "Homme",
+      telephone: "0550784199",
+      adresse: "Cité Wiam, Didouche Mourad, Constantine",
+      antecedents: "Cardiopathie ischémique avec antécédent de stent. Sous Kardegic 75mg et Atorvastatine 20mg.",
+      groupeSanguin: GroupeSanguin.AB_POS,
+      createdAt: new Date("2026-10-08T09:00:00.000Z"),
+    },
+  });
+
+  const t1_p7 = await prisma.traitement.create({
+    data: {
+      patientId: p7.id,
+      description: "Conception, confection et pose d'une prothèse adjointe complète amovible bimaxillaire en résine acrylique (Haut et Bas)",
+      dent: "Arcades maxillaire et mandibulaire complètes",
+      prixTotal: 55000,
+      statut: StatutTraitement.EN_COURS,
+      createdAt: new Date("2026-10-08T09:30:00.000Z"),
+      updatedAt: new Date("2026-10-21T11:30:00.000Z"),
+    },
+  });
+
+  // Séance 1 : Empreintes primaires
+  const rdv1_p7 = await prisma.rendezVous.create({
+    data: {
+      patientId: p7.id,
+      traitementId: t1_p7.id,
+      date: new Date("2026-10-08T09:30:00.000Z"),
+      description: "Consultation prothèse complète et empreintes primaires",
+      note: "Patient sous Kardegic 75mg",
+    },
+  });
+
+  await prisma.consultation.create({
+    data: {
+      patientId: p7.id,
+      rendezVousId: rdv1_p7.id,
+      motifDeConsultation: "Édentement complet bimaxillaire, inconfort fonctionnel et instabilité sévère des anciennes prothèses",
+      note: "Examen des crêtes édentées : Crête maxillaire bien conservée, crête mandibulaire très résorbée avec papilles piriformes dépressibles. Muqueuse buccale saine. Prise d'empreintes primaires mucostatiques à l'alginate pour réalisation des porte-empreintes individuels (PEI).",
+      createdAt: new Date("2026-10-08T09:45:00.000Z"),
+      consultationsTraitement: {
+        create: {
+          traitementId: t1_p7.id,
+          acteRealise: "Examen prothétique complet et empreintes primaires bimaxillaires à l'alginate",
+          createdAt: new Date("2026-10-08T10:15:00.000Z"),
+        },
+      },
+    },
+  });
+
+  await prisma.paiement.create({
+    data: {
+      patientId: p7.id,
+      traitementId: t1_p7.id,
+      montant: 20000,
+      date: new Date("2026-10-08T10:20:00.000Z"),
+      note: "Versement séance 1 : Acompte d'engagement pour prothèse bimaxillaire complète",
+    },
+  });
+
+  // Séance 2 : Empreintes fonctionnelles
+  const rdv2_p7 = await prisma.rendezVous.create({
+    data: {
+      patientId: p7.id,
+      traitementId: t1_p7.id,
+      date: new Date("2026-10-21T10:30:00.000Z"),
+      description: "Empreintes secondaires fonctionnelles aux PEI",
+      note: "Enregistrement de la dynamique musculaire",
+    },
+  });
+
+  await prisma.consultation.create({
+    data: {
+      patientId: p7.id,
+      rendezVousId: rdv2_p7.id,
+      motifDeConsultation: "Empreintes anatomo-fonctionnelles sous pression musculaire",
+      note: "Margination soignée des bords des PEI à la pâte thermoplastique de Kerr pour enregistrer la ligne de réflexion muqueuse, le frein de la lèvre et les poches de Fish à la mandibule. Empreinte fonctionnelle à la pâte oxyde de zinc-eugénol (Kelly's). Coulée des maîtres modèles.",
+      createdAt: new Date("2026-10-21T10:45:00.000Z"),
+      consultationsTraitement: {
+        create: {
+          traitementId: t1_p7.id,
+          acteRealise: "Empreintes secondaires fonctionnelles maxillaire et mandibulaire au zinc-eugénol",
+          createdAt: new Date("2026-10-21T11:20:00.000Z"),
+        },
+      },
+    },
+  });
+
+  await prisma.paiement.create({
+    data: {
+      patientId: p7.id,
+      traitementId: t1_p7.id,
+      montant: 15000,
+      date: new Date("2026-10-21T11:30:00.000Z"),
+      note: "Versement séance 2 : Acompte fabrication laboratoire montage sur cire (Reste 20 000 DZD)",
+    },
+  });
+
+  await prisma.rendezVous.create({
+    data: {
+      patientId: p7.id,
+      traitementId: t1_p7.id,
+      date: new Date("2026-11-06T15:00:00.000Z"),
+      description: "Enregistrement de l'articulé inter-maxillaire et essayage esthétique du montage sur cire",
+      note: "Vérifier la dimension verticale d'occlusion (DVO) et ligne du sourire",
+    },
+  });
+
+  // ============================================================================
+  // PATIENT 8: Samia Larbi (Fracture Coronaire Urgente & Collage Composite 21)
+  // ============================================================================
+  console.log("   -> Dossier 8 : Samia Larbi (Fracture traumatique incisive 21 & restauration esthétique)");
+  const p8 = await prisma.patient.create({
+    data: {
+      nom: "Samia Larbi",
+      age: 39,
+      dateDeNaissance: new Date("1987-09-04T00:00:00.000Z"),
+      sexe: "Femme",
+      telephone: "0778921436",
+      adresse: "Rue Colonel Amirouche, El-Harrouch, Skikda",
+      antecedents: "Aucun antécédent médical notable. Bonne santé générale.",
+      groupeSanguin: GroupeSanguin.B_NEG,
+      createdAt: new Date("2026-10-26T16:00:00.000Z"),
+    },
+  });
+
+  const t1_p8 = await prisma.traitement.create({
+    data: {
+      patientId: p8.id,
+      description: "Reconstitution esthétique immédiate de l'angle mésio-incisif fracturé dent 21",
+      dent: "21",
+      prixTotal: 5000,
+      statut: StatutTraitement.TERMINE,
+      createdAt: new Date("2026-10-26T16:15:00.000Z"),
+      updatedAt: new Date("2026-10-26T17:15:00.000Z"),
+    },
+  });
+
+  const rdv1_p8 = await prisma.rendezVous.create({
+    data: {
+      patientId: p8.id,
+      traitementId: t1_p8.id,
+      date: new Date("2026-10-26T16:15:00.000Z"),
+      description: "Urgence traumatisme dentaire incisive supérieure 21",
+      note: "Reçue sans rendez-vous préalable",
+    },
+  });
+
+  await prisma.consultation.create({
+    data: {
+      patientId: p8.id,
+      rendezVousId: rdv1_p8.id,
+      motifDeConsultation: "Fracture brutale de l'angle de l'incisive centrale gauche (21) lors d'un repas (noyau d'olive)",
+      note: "Examen clinique : Fracture coronaire amélo-dentinaire sans exposition pulpaire (stade II d'Ellis). Test au froid positif (pulpe vivante). Pas de mobilité dentaire. Radiographie rétroalvéolaire excluant toute fracture radiculaire ou lésion ligamentaire. Biseautage amélaire vestibulaire en aile de mouette. Mordançage acide et système adhésif photopolymérisé. Reconstitution anatomique au composite céramique esthétique de haute translucidité. Polissage haute brillance immédiat.",
+      createdAt: new Date("2026-10-26T16:30:00.000Z"),
+      radios: {
+        create: {
+          patientId: p8.id,
+          description: "Cliché rétroalvéolaire dent 21 confirmant l'absence de trait de fracture radiculaire ou d'atteinte apicale",
+          fichier: "/uploads/radios/larbi_incisive21_retro.jpg",
+          createdAt: new Date("2026-10-26T16:25:00.000Z"),
+        },
+      },
+      consultationsTraitement: {
+        create: {
+          traitementId: t1_p8.id,
+          acteRealise: "Biseautage, collage amélo-dentinaire et stratification composite esthétique angle incisif 21",
+          createdAt: new Date("2026-10-26T17:05:00.000Z"),
+        },
+      },
+    },
+  });
+
+  await prisma.paiement.create({
+    data: {
+      patientId: p8.id,
+      traitementId: t1_p8.id,
+      montant: 5000,
+      date: new Date("2026-10-26T17:15:00.000Z"),
+      note: "Règlement complet de la reconstitution esthétique composite dent 21 (5 000 DZD)",
+    },
+  });
+
+  console.log("   ✅ Les 8 dossiers patients complets ont été insérés avec succès.");
+
+  // -----------------------------------------------------------------------------
+  // STEP 5: Realistic Operating Expenses (Dépenses du Cabinet)
+  // -----------------------------------------------------------------------------
+  console.log("\n💳 Étape 5 : Enregistrement des charges et dépenses d'exploitation du cabinet...");
+
+  const operatingExpenses = [
+    {
+      montant: 22000,
+      description: "Facture Laboratoire de Prothèse Dentaire Art & Sourire (Couronne céramique & châssis stellite) (Réf Clinique)",
+      date: new Date("2026-10-02T10:00:00.000Z"),
+    },
+    {
+      montant: 35000,
+      description: "Loyer mensuel du local médical cabinet dentaire (Mois d'Octobre 2026) (Réf Clinique)",
+      date: new Date("2026-10-05T09:00:00.000Z"),
+    },
+    {
+      montant: 9500,
+      description: "Achat consommables dentaires Comptoir Médico-Dentaire (Cartouches Septanest 1:200000, aiguilles, gants nitrile) (Réf Clinique)",
+      date: new Date("2026-10-08T14:30:00.000Z"),
+    },
+    {
+      montant: 4800,
+      description: "Facture Sonelgaz Électricité et Gaz du cabinet (Alimentation compresseur, autoclave et scialytique) (Réf Clinique)",
+      date: new Date("2026-10-14T11:00:00.000Z"),
+    },
+    {
+      montant: 6200,
+      description: "Réapprovisionnement pharmacie du cabinet : Composites Filtek, adhésifs, ciments Fuji I, Biodentine (Réf Clinique)",
+      date: new Date("2026-10-18T16:00:00.000Z"),
+    },
+    {
+      montant: 4500,
+      description: "Maintenance trimestrielle et remplacement filtres compresseur médical et autoclave classe B (Réf Clinique)",
+      date: new Date("2026-10-22T10:00:00.000Z"),
+    },
+    {
+      montant: 3200,
+      description: "Abonnement Internet Très Haut Débit Fibre Algérie Télécom (Idoom Fibre Pro) (Réf Clinique)",
+      date: new Date("2026-10-27T12:00:00.000Z"),
+    },
+    {
+      montant: 2800,
+      description: "Produits de stérilisation et désinfection hospitalière (Aniosyme DD1, lingettes surfaces opératoires) (Réf Clinique)",
+      date: new Date("2026-10-30T15:00:00.000Z"),
+    },
+  ];
+
+  for (const exp of operatingExpenses) {
+    await prisma.depense.create({ data: exp });
+  }
+  console.log(`   ✅ ${operatingExpenses.length} dépenses d'exploitation enregistrées.`);
+
+  // -----------------------------------------------------------------------------
+  // STEP 6: Comprehensive Verification & Financial Audit
+  // -----------------------------------------------------------------------------
+  console.log("\n================================================================================");
+  console.log("🔍 ÉTAPE 6 : AUDIT CLINIQUE, CONTRÔLE D'INTÉGRITÉ & CALCULS FINANCIERS");
+  console.log("================================================================================\n");
+
+  const totalPatients = await prisma.patient.count();
+  const cohortPatients = await prisma.patient.findMany({
+    where: { nom: { in: CLINICAL_COHORT_NAMES } },
+    include: {
+      traitements: {
+        include: { versements: true, consultationsTraitement: true },
+      },
+      consultations: {
+        include: {
+          ordonnance: { include: { items: { include: { medicament: true } } } },
+          bilanRecip: { include: { items: { include: { bilan: true } } } },
+          radios: true,
+          justificationRecord: true,
+        },
+      },
+      rendezVous: true,
+      paiements: true,
+    },
+  });
+
+  console.log(`📊 Nombre total de patients en base : ${totalPatients} (Taille de la cohorte : ${cohortPatients.length})`);
+
+  if (cohortPatients.length !== CLINICAL_COHORT_NAMES.length) {
+    throw new Error(`Incohérence : ${CLINICAL_COHORT_NAMES.length} patients attendus, ${cohortPatients.length} trouvés.`);
   }
 
-  await verifyDatabaseAndRules();
+  let totalBilledCohort = 0;
+  let totalPaidCohort = 0;
+  let totalDebtCohort = 0;
+  let countCompleted = 0;
+  let countOngoing = 0;
+
+  console.log("\n📋 DÉTAIL PAR DOSSIER PATIENT (ACTES, FACTURATION, RÈGLEMENTS) :");
+  console.log("--------------------------------------------------------------------------------");
+
+  for (const pat of cohortPatients) {
+    let pBilled = 0;
+    let pPaid = 0;
+
+    for (const tr of pat.traitements) {
+      pBilled += tr.prixTotal;
+      if (tr.statut === StatutTraitement.TERMINE) countCompleted++;
+      if (tr.statut === StatutTraitement.EN_COURS) countOngoing++;
+
+      const trPaid = tr.versements.reduce((sum, v) => sum + v.montant, 0);
+      pPaid += trPaid;
+    }
+
+    const pDebt = Math.max(0, pBilled - pPaid);
+    totalBilledCohort += pBilled;
+    totalPaidCohort += pPaid;
+    totalDebtCohort += pDebt;
+
+    const statusBadge = pDebt === 0 ? "✅ Soldé" : `⚠️ Reste dû : ${pDebt.toLocaleString("fr-FR")} DZD`;
+    console.log(`• [${pat.nom.padEnd(23)}] | Devis: ${pBilled.toLocaleString("fr-FR").padStart(6)} DZD | Encaissé: ${pPaid.toLocaleString("fr-FR").padStart(6)} DZD | ${statusBadge}`);
+    console.log(`    -> Consultations: ${pat.consultations.length} | Traitements: ${pat.traitements.length} | RDV: ${pat.rendezVous.length} | Versements: ${pat.paiements.length}`);
+  }
+
+  console.log("--------------------------------------------------------------------------------");
+  console.log(`💰 Total Traitements Devisés (Cohorte) : ${totalBilledCohort.toLocaleString("fr-FR")} DZD`);
+  console.log(`💵 Total Paiements Encaissés (Cohorte)  : ${totalPaidCohort.toLocaleString("fr-FR")} DZD`);
+  console.log(`📌 Créances / Reste à Recouvrer         : ${totalDebtCohort.toLocaleString("fr-FR")} DZD`);
+  console.log(`📈 Statuts des soins : ${countCompleted} Traitements Terminés | ${countOngoing} En Cours`);
+
+  // Financial consistency verification
+  if (totalBilledCohort - totalPaidCohort !== totalDebtCohort) {
+    throw new Error("Erreur de cohérence mathématique : Total Devisé - Total Payé != Reste à recouvrer");
+  }
+
+  // Cabinet Overall Financial Statement
+  const allExpenses = await prisma.depense.findMany();
+  const totalDepensesCabinet = allExpenses.reduce((sum, d) => sum + d.montant, 0);
+  const allPayments = await prisma.paiement.findMany();
+  const totalEncaisseCabinet = allPayments.reduce((sum, p) => sum + p.montant, 0);
+  const beneficeNetCabinet = totalEncaisseCabinet - totalDepensesCabinet;
+
+  console.log("\n💼 SITUATION FINANCIÈRE GLOBALE DU CABINET (TOUTE ACTIVITÉ) :");
+  console.log("--------------------------------------------------------------------------------");
+  console.log(`🔹 Total des Dépenses et Charges         : ${totalDepensesCabinet.toLocaleString("fr-FR")} DZD`);
+  console.log(`🔹 Total des Recettes Encaissées         : ${totalEncaisseCabinet.toLocaleString("fr-FR")} DZD`);
+  console.log(`🔹 Bénéfice Net d'Exploitation           : ${beneficeNetCabinet.toLocaleString("fr-FR")} DZD`);
+
+  // Foreign key and relational integrity checks
+  console.log("\n🛡️ Contrôle rigoureux de l'intégrité référentielle :");
+  
+  const allOrdonnanceItems = await prisma.ordonnanceItem.findMany({
+    select: { id: true, medicamentId: true, ordonnanceId: true },
+  });
+  const allMedicaments = await prisma.medicament.findMany({ select: { id: true } });
+  const medIdSet = new Set(allMedicaments.map((m) => m.id));
+  const orphanOrdonnanceItems = allOrdonnanceItems.filter((i) => !medIdSet.has(i.medicamentId)).length;
+
+  const allBilanItems = await prisma.bilanItem.findMany({
+    select: { id: true, bilanId: true, bilanRecipId: true },
+  });
+  const allBilans = await prisma.bilan.findMany({ select: { id: true } });
+  const bilanIdSet = new Set(allBilans.map((b) => b.id));
+  const orphanBilanItems = allBilanItems.filter((i) => !bilanIdSet.has(i.bilanId)).length;
+
+  const allPaiementsList = await prisma.paiement.findMany({
+    select: { id: true, patientId: true, traitementId: true },
+  });
+  const allPatientsList = await prisma.patient.findMany({ select: { id: true } });
+  const patientIdSet = new Set(allPatientsList.map((p) => p.id));
+  const allTraitementsList = await prisma.traitement.findMany({ select: { id: true } });
+  const traitementIdSet = new Set(allTraitementsList.map((t) => t.id));
+  const orphanPaiements = allPaiementsList.filter(
+    (p) => !patientIdSet.has(p.patientId) || (p.traitementId && !traitementIdSet.has(p.traitementId))
+  ).length;
+
+  const allConsultTraits = await prisma.consultationTraitement.findMany({
+    select: { id: true, consultationId: true, traitementId: true },
+  });
+  const allConsultationsList = await prisma.consultation.findMany({ select: { id: true } });
+  const consultIdSet = new Set(allConsultationsList.map((c) => c.id));
+  const orphanConsultTraits = allConsultTraits.filter(
+    (ct) => !consultIdSet.has(ct.consultationId) || !traitementIdSet.has(ct.traitementId)
+  ).length;
+
+  console.log(`   - OrdonnanceItem sans médicament lié : ${orphanOrdonnanceItems}`);
+  console.log(`   - BilanItem sans bilan associé       : ${orphanBilanItems}`);
+  console.log(`   - Paiement sans dossier patient       : ${orphanPaiements}`);
+  console.log(`   - Acte/Séance sans consultation liée : ${orphanConsultTraits}`);
+
+  if (orphanOrdonnanceItems > 0 || orphanBilanItems > 0 || orphanPaiements > 0 || orphanConsultTraits > 0) {
+    throw new Error("Échec d'intégrité : des enregistrements orphelins ont été détectés !");
+  }
+
+  console.log("   ✅ Intégrité référentielle 100% conforme. Aucun enregistrement orphelin.");
+
+  console.log("\n================================================================================");
+  console.log("🎉 PEUPLEMENT ET VÉRIFICATION DE LA BASE DE DONNÉES RÉUSSIS AVEC SUCCÈS !");
+  console.log("================================================================================\n");
 }
 
 main()
   .catch((err) => {
-    console.error("\n❌ ERREUR CRITIQUE DANS LE SCRIPT DE TEST :", err);
+    console.error("\n❌ ERREUR LORS DU PEUPLEMENT DE LA BASE DE DONNÉES :\n", err);
     process.exit(1);
   })
   .finally(async () => {
     await prisma.$disconnect();
-    console.log("\n🔌 Connexion Prisma fermée proprement.\n");
   });

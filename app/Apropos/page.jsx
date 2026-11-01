@@ -115,18 +115,20 @@ const CAROUSEL_SLIDES = [
     title: "Gestion des Soins Dentaires & Actes par Dent",
     subtitle: "Schéma dentaire FDI, multi-séances & suivi clinique",
     desc: "Création et suivi des plans de traitement avec numérotation dentaire internationale FDI (endodontie, prothèses, chirurgie, composites, implants). Enregistrement des actes réalisés par séance avec modal détaillée et reprise de traitement.",
-    badge: "Odontologie & Actes FDI",
+    badge: "Soins & Actes FDI",
     icon: ToothIcon,
     color: "from-blue-600 to-cyan-500",
+    image: "/apropos/Traitment.jpg",
   },
   {
     id: 2,
-    title: "Finances, Trésorerie & Bénéfice Net Mensuel",
-    subtitle: "Bénéfice Net = Total Encaissé − Total Dépenses",
-    desc: "Suivi en direct de la rentabilité du cabinet : calcul automatique du Bénéfice Net mensuel déduisant les charges des recettes réelles encaissées. Tableau de bord financier clair, suivi des crédits et analyse par période.",
-    badge: "Finances & Bénéfice Net",
+    title: "Statistiques & Tableau de Bord Financier",
+    subtitle: "Bénéfice Net en direct, analyses d'activité & recettes",
+    desc: "Suivi en direct de la performance du cabinet : calcul automatique du Bénéfice Net déduisant les charges des recettes réelles encaissées. Graphiques d'activité mensuelle, répartition des actes et flux horaire des visites.",
+    badge: "Statistiques & Finances",
     icon: TrendingUp,
-    color: "from-emerald-600 to-teal-500",
+    color: "from-indigo-600 to-blue-500",
+    image: "/apropos/Stats.jpg",
   },
   {
     id: 3,
@@ -136,15 +138,17 @@ const CAROUSEL_SLIDES = [
     badge: "Dépenses & Fournitures",
     icon: Receipt,
     color: "from-amber-600 to-rose-500",
+    image: "/apropos/depenses.jpg",
   },
   {
     id: 4,
     title: "Règlements & Versements Échelonnés",
-    subtitle: "Acomptes, Règlements par séance & Prévention des dettes",
+    subtitle: "Acomptes, Règlements par séance & Prévention des crédits",
     desc: "Suivi rigoureux de la trésorerie patient : calcul instantané du montant total des actes, total payé et crédit restant. Gestion des versements strictement rattachés aux traitements avec contrôle anti-dépassement.",
     badge: "Versements & Crédits",
     icon: DollarSign,
     color: "from-teal-600 to-emerald-700",
+    image: "/apropos/credit.jpg",
   },
   {
     id: 5,
@@ -154,6 +158,7 @@ const CAROUSEL_SLIDES = [
     badge: "Consultation Pro",
     icon: Stethoscope,
     color: "from-indigo-600 to-violet-500",
+    image: "/apropos/consultation.jpg",
   },
   {
     id: 6,
@@ -163,24 +168,27 @@ const CAROUSEL_SLIDES = [
     badge: "Prescription Rapide",
     icon: Pill,
     color: "from-purple-600 to-pink-500",
+    image: "/apropos/newordonnance.jpg",
   },
   {
     id: 7,
-    title: "Imagerie, Radiographies & Bilans de Laboratoire",
-    subtitle: "Archivage sécurisé des clichés dentaires et analyses",
-    desc: "Stockage et visionneuse des radiographies numériques (panoramiques OPG, rétro-alvéolaires, Cône Beam 3D) et prescription de bilans pré-opératoires avec archivage des comptes-rendus PDF.",
-    badge: "Radiologie & Analyses",
-    icon: TestTube,
+    title: "Nouvelle Consultation & Diagnostic Clinique",
+    subtitle: "Interface d'examen médical intuitive et rapide",
+    desc: "Saisie fluide des motifs de consultation, observations cliniques, planification des rendez-vous, bilans de laboratoire et radiographies numériques en haute résolution.",
+    badge: "Examen & Diagnostic",
+    icon: DentistIcon,
     color: "from-sky-600 to-blue-700",
+    image: "/apropos/newconsulterpage.jpg",
   },
   {
     id: 8,
-    title: "Justifications Médicales, Agenda & Statistiques",
-    subtitle: "Certificats d'arrêt, Planning des RDV & Tableaux de bord",
-    desc: "Édition de certificats médicaux et dispenses post-opératoires, gestion du calendrier des rendez-vous et tableau de bord analytique de l'activité quotidienne, hebdomadaire et mensuelle.",
-    badge: "Pilotage & Administration",
-    icon: Calendar,
-    color: "from-rose-600 to-red-500",
+    title: "Paramètres, Identité & Sauvegardes Sécurisées",
+    subtitle: "Personnalisation du cabinet, en-tête d'impression & export chiffré",
+    desc: "Configuration complète de l'identité du praticien et du cabinet, en-tête officiel pour les impressions, personnalisation du thème et création / restauration de sauvegardes sécurisées chiffrées en un clic.",
+    badge: "Paramètres & Sauvegardes",
+    icon: ShieldCheck,
+    color: "from-emerald-600 to-cyan-700",
+    image: "/apropos/params.jpg",
   },
 ];
 
@@ -312,6 +320,7 @@ export default function AproposPage() {
   const [filterRating, setFilterRating] = useState(0);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [feedbackSuccess, setFeedbackSuccess] = useState(false);
+  const [previewImage, setPreviewImage] = useState(null);
 
   // New review form state
   const [newReview, setNewReview] = useState({
@@ -527,7 +536,7 @@ export default function AproposPage() {
                 Galerie & Fonctionnalités Clés
               </h2>
               <p className="text-sm text-gray-500">
-                Découvrez les modules principaux intégrés dans le système
+                Découvrez les écrans et modules réels intégrés dans le système
               </p>
             </div>
 
@@ -541,7 +550,8 @@ export default function AproposPage() {
                     prev === 0 ? CAROUSEL_SLIDES.length - 1 : prev - 1,
                   )
                 }
-                className="h-9 w-9 rounded-full border-gray-300 hover:bg-[var(--color-100)] text-gray-700"
+                className="h-9 w-9 rounded-full border-gray-300 hover:bg-[var(--color-100)] text-gray-700 cursor-pointer"
+                title="Diapositive précédente"
               >
                 <ChevronLeft className="w-4 h-4" />
               </Button>
@@ -551,7 +561,8 @@ export default function AproposPage() {
                 onClick={() =>
                   setCurrentSlide((prev) => (prev + 1) % CAROUSEL_SLIDES.length)
                 }
-                className="h-9 w-9 rounded-full border-gray-300 hover:bg-[var(--color-100)] text-gray-700"
+                className="h-9 w-9 rounded-full border-gray-300 hover:bg-[var(--color-100)] text-gray-700 cursor-pointer"
+                title="Diapositive suivante"
               >
                 <ChevronRight className="w-4 h-4" />
               </Button>
@@ -567,148 +578,189 @@ export default function AproposPage() {
               </div>
             </Card>
           ) : (
-            <div className="relative overflow-hidden rounded-2xl border border-[var(--color-200)] bg-white shadow-xl">
-              <AnimatePresence mode="wait">
-                {CAROUSEL_SLIDES.map((slide, index) => {
-                  if (index !== currentSlide) return null;
-                  const Icon = slide.icon;
+            <div className="space-y-4">
+              {/* Main Carousel Card */}
+              <div className="relative overflow-hidden rounded-2xl border border-[var(--color-200)] bg-white shadow-xl">
+                <AnimatePresence mode="wait">
+                  {CAROUSEL_SLIDES.map((slide, index) => {
+                    if (index !== currentSlide) return null;
+                    const Icon = slide.icon;
 
-                  return (
-                    <motion.div
-                      key={slide.id}
-                      initial={{ opacity: 0, x: 50 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      exit={{ opacity: 0, x: -50 }}
-                      transition={{ duration: 0.45, ease: "easeInOut" }}
-                      className="grid grid-cols-1 lg:grid-cols-12 min-h-[380px]"
-                    >
-                      {/* Left: Info details */}
-                      <div className="lg:col-span-6 p-8 sm:p-10 flex flex-col justify-between space-y-6">
-                        <div className="space-y-4">
-                          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-[var(--color-100)] text-[var(--color-700)]">
-                            <Icon className="w-3.5 h-3.5" />
-                            {slide.badge}
-                          </div>
-
-                          <h3 className="text-2xl sm:text-3xl font-extrabold text-gray-900">
-                            {slide.title}
-                          </h3>
-
-                          <h4 className="text-base font-semibold text-[var(--color-600)]">
-                            {slide.subtitle}
-                          </h4>
-
-                          <p className="text-gray-600 text-sm sm:text-base leading-relaxed">
-                            {slide.desc}
-                          </p>
-                        </div>
-
-                        {/* Slide Indicators & Quick Test Link */}
-                        <div className="flex items-center justify-between pt-4">
-                          <div className="flex items-center gap-2">
-                            {CAROUSEL_SLIDES.map((_, i) => (
-                              <button
-                                key={i}
-                                onClick={() => setCurrentSlide(i)}
-                                className={`h-2.5 rounded-full transition-all duration-300 ${
-                                  i === currentSlide
-                                    ? "w-8 bg-[var(--color-600)]"
-                                    : "w-2.5 bg-gray-200 hover:bg-gray-300"
-                                }`}
-                                aria-label={`Aller au slide ${i + 1}`}
-                              />
-                            ))}
-                          </div>
-
-                          <Button
-                            onClick={() => router.push("/Accueill")}
-                            variant="ghost"
-                            className="text-xs font-bold text-[var(--color-600)] hover:text-[var(--color-700)] hover:bg-[var(--color-50)] gap-1 p-2"
-                          >
-                            <span>Tester ce module</span>
-                            <ArrowRight className="w-3.5 h-3.5" />
-                          </Button>
-                        </div>
-                      </div>
-
-                      {/* Right: Visual Mockup Showcase */}
-                      <div
-                        className={`lg:col-span-6 bg-gradient-to-br ${slide.color} p-8 flex items-center justify-center relative overflow-hidden`}
+                    return (
+                      <motion.div
+                        key={slide.id}
+                        initial={{ opacity: 0, x: 40 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        exit={{ opacity: 0, x: -40 }}
+                        transition={{ duration: 0.4, ease: "easeInOut" }}
+                        className="grid grid-cols-1 lg:grid-cols-12 min-h-[420px]"
                       >
-                        {/* Background decorative circles */}
-                        <div className="absolute -top-10 -right-10 w-48 h-48 rounded-full bg-white/10 blur-xl" />
-                        <div className="absolute -bottom-10 -left-10 w-48 h-48 rounded-full bg-black/10 blur-xl" />
-
-                        {/* Interactive Mockup Graphic */}
-                        <div className="relative z-10 w-full max-w-md bg-white/95 backdrop-blur-md rounded-xl p-5 shadow-2xl border border-white/40 space-y-4 text-gray-800">
-                          <div className="flex items-center justify-between border-b border-gray-100 pb-3">
-                            <div className="flex items-center gap-2">
-                              <div className="w-3 h-3 rounded-full bg-rose-500" />
-                              <div className="w-3 h-3 rounded-full bg-amber-500" />
-                              <div className="w-3 h-3 rounded-full bg-emerald-500" />
+                        {/* Left: Info details */}
+                        <div className="lg:col-span-5 p-6 sm:p-8 lg:p-10 flex flex-col justify-between space-y-6 bg-white">
+                          <div className="space-y-4">
+                            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-[var(--color-100)] text-[var(--color-700)]">
+                              <Icon className="w-3.5 h-3.5" />
+                              {slide.badge}
                             </div>
-                            <span className="text-xs font-semibold text-gray-500">
-                              Cabinet Dentaire v4.0
-                            </span>
+
+                            <h3 className="text-2xl sm:text-3xl font-extrabold text-gray-900 leading-tight">
+                              {slide.title}
+                            </h3>
+
+                            <h4 className="text-sm sm:text-base font-semibold text-[var(--color-600)]">
+                              {slide.subtitle}
+                            </h4>
+
+                            <p className="text-gray-600 text-sm leading-relaxed">
+                              {slide.desc}
+                            </p>
                           </div>
 
-                          <div className="flex items-center gap-3">
-                            <div className="p-3 rounded-xl bg-[var(--color-100)] text-[var(--color-600)]">
-                              <Icon className="w-6 h-6" />
-                            </div>
-                            <div>
-                              <div className="text-sm font-bold text-gray-900">
-                                {slide.title}
+                          {/* Slide Indicators & Actions */}
+                          <div className="space-y-4 pt-4 border-t border-gray-100">
+                            <div className="flex items-center justify-between">
+                              {/* Dots navigation */}
+                              <div className="flex items-center gap-1.5">
+                                {CAROUSEL_SLIDES.map((_, i) => (
+                                  <button
+                                    key={i}
+                                    onClick={() => setCurrentSlide(i)}
+                                    className={`h-2.5 rounded-full transition-all duration-300 cursor-pointer ${
+                                      i === currentSlide
+                                        ? "w-7 bg-[var(--color-600)]"
+                                        : "w-2.5 bg-gray-200 hover:bg-gray-300"
+                                    }`}
+                                    aria-label={`Aller au slide ${i + 1}`}
+                                  />
+                                ))}
                               </div>
-                              <div className="text-xs text-gray-500">
-                                Statut : Opérationnel & Sécurisé
-                              </div>
-                            </div>
-                          </div>
 
-                          <div className="grid grid-cols-2 gap-2 text-xs">
-                            <div className="p-2.5 bg-gray-50 rounded-lg border border-gray-100">
-                              <span className="text-gray-500 block">
-                                Fréquence d'utilisation
-                              </span>
-                              <span className="font-bold text-gray-900">
-                                Continue (24/7)
+                              <span className="text-xs font-medium text-gray-400">
+                                {currentSlide + 1} / {CAROUSEL_SLIDES.length}
                               </span>
                             </div>
-                            <div className="p-2.5 bg-gray-50 rounded-lg border border-gray-100">
-                              <span className="text-gray-500 block">
-                                Base de données
-                              </span>
-                              <span className="font-bold text-emerald-600">
-                                PostgreSQL
-                              </span>
-                            </div>
-                          </div>
 
-                          <div className="p-3 rounded-lg bg-[var(--color-50)] border border-[var(--color-200)] text-xs text-[var(--color-800)] font-medium flex items-center justify-between">
                             <div className="flex items-center gap-2">
-                              <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0" />
-                              <span>Accessible en Web & Electron</span>
+                              <Button
+                                onClick={() => router.push("/Accueill")}
+                                className="flex-1 bg-[var(--color-600)] hover:bg-[var(--color-700)] text-white text-xs sm:text-sm font-semibold rounded-xl h-10 shadow-sm flex items-center justify-center gap-2 cursor-pointer"
+                              >
+                                <Play className="w-3.5 h-3.5 fill-white" />
+                                <span>Tester ce module</span>
+                              </Button>
+                              <Button
+                                variant="outline"
+                                onClick={() => setPreviewImage(slide)}
+                                className="rounded-xl h-10 px-3 text-xs text-gray-700 hover:bg-gray-50 border-gray-200 flex items-center gap-1.5 cursor-pointer"
+                                title="Agrandir l'image"
+                              >
+                                <ExternalLink className="w-3.5 h-3.5" />
+                                <span className="hidden sm:inline">Agrandir</span>
+                              </Button>
                             </div>
-                            <Button
-                              onClick={() => router.push("/Accueill")}
-                              size="sm"
-                              className="h-7 text-xs bg-[var(--color-600)] hover:bg-[var(--color-700)] text-white rounded-lg px-2.5"
-                            >
-                              Ouvrir
-                            </Button>
                           </div>
                         </div>
+
+                        {/* Right: Real App Screenshot Showcase Frame */}
+                        <div
+                          className={`lg:col-span-7 bg-gradient-to-br ${slide.color} p-4 sm:p-6 lg:p-8 flex items-center justify-center relative overflow-hidden`}
+                        >
+                          {/* Background decorative elements */}
+                          <div className="absolute -top-10 -right-10 w-48 h-48 rounded-full bg-white/10 blur-xl" />
+                          <div className="absolute -bottom-10 -left-10 w-48 h-48 rounded-full bg-black/10 blur-xl" />
+
+                          {/* App Window Frame Mockup */}
+                          <div className="relative z-10 w-full max-w-2xl bg-gray-900 rounded-xl shadow-2xl border border-white/25 overflow-hidden group flex flex-col">
+                            {/* Window Header Bar */}
+                            <div className="flex items-center justify-between px-3.5 py-2.5 bg-gray-900 text-white text-xs border-b border-gray-800 select-none">
+                              <div className="flex items-center gap-2">
+                                <div className="flex items-center gap-1.5">
+                                  <div className="w-2.5 h-2.5 rounded-full bg-rose-500" />
+                                  <div className="w-2.5 h-2.5 rounded-full bg-amber-500" />
+                                  <div className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
+                                </div>
+                                <span className="text-[11px] font-medium text-gray-300 ml-2 hidden sm:inline">
+                                  Cabinet Dentaire • {slide.badge}
+                                </span>
+                              </div>
+
+                              <div className="flex items-center gap-2">
+                                <span className="text-[10px] text-gray-400 font-mono hidden sm:inline">
+                                  public{slide.image}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => setPreviewImage(slide)}
+                                  className="p-1 rounded-md bg-white/10 hover:bg-white/20 text-white transition-colors cursor-pointer"
+                                  title="Agrandir la capture d'écran"
+                                >
+                                  <ExternalLink className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            </div>
+
+                            {/* Screenshot Image Container */}
+                            <div
+                              onClick={() => setPreviewImage(slide)}
+                              className="relative aspect-[16/10] w-full bg-gray-950 overflow-hidden cursor-pointer"
+                            >
+                              <img
+                                src={slide.image}
+                                alt={slide.title}
+                                className="w-full h-full object-contain object-top transition-transform duration-500 group-hover:scale-[1.02]"
+                              />
+
+                              {/* Hover Action Badge */}
+                              <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center backdrop-blur-[1px]">
+                                <span className="px-3.5 py-2 rounded-xl bg-gray-900/90 text-white text-xs font-semibold shadow-xl border border-white/20 flex items-center gap-2">
+                                  <ExternalLink className="w-4 h-4" />
+                                  Cliquer pour voir en plein écran
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </motion.div>
+                    );
+                  })}
+                </AnimatePresence>
+              </div>
+
+              {/* Thumbnails  <div className="grid grid-cols-4 sm:grid-cols-8 gap-2 sm:gap-3 pt-2">
+                {CAROUSEL_SLIDES.map((slide, idx) => (
+                  <button
+                    key={slide.id}
+                    type="button"
+                    onClick={() => setCurrentSlide(idx)}
+                    className={`group relative rounded-xl overflow-hidden border-2 transition-all duration-200 text-left bg-white cursor-pointer ${
+                      idx === currentSlide
+                        ? "border-[var(--color-600)] ring-2 ring-[var(--color-300)] shadow-md -translate-y-1"
+                        : "border-gray-200 hover:border-[var(--color-300)] opacity-70 hover:opacity-100"
+                    }`}
+                  >
+                    <div className="aspect-[16/10] w-full bg-gray-900 relative overflow-hidden">
+                      <img
+                        src={slide.image}
+                        alt={slide.title}
+                        className="w-full h-full object-cover object-top group-hover:scale-105 transition-transform duration-300"
+                      />
+                      {idx === currentSlide && (
+                        <div className="absolute inset-0 bg-[var(--color-600)]/20 border-b-2 border-[var(--color-600)]" />
+                      )}
+                    </div>
+                    <div className="p-1.5 bg-white text-center">
+                      <div className="truncate text-[10px] sm:text-[11px] font-semibold text-gray-800">
+                        {slide.badge}
                       </div>
-                    </motion.div>
-                  );
-                })}
-              </AnimatePresence>
+                    </div>
+                  </button>
+                ))}
+              </div> Navigation Strip */}
+             
             </div>
           )}
         </motion.section>
 
-        {/* ======================================================== */}
         {/* 3. CORE FEATURES GRID */}
         {/* ======================================================== */}
         <motion.section
@@ -1224,6 +1276,57 @@ export default function AproposPage() {
             </form>
           </DialogContent>
         </Dialog>
+        {/* ======================================================== */}
+        {/* FULLSCREEN IMAGE PREVIEW DIALOG */}
+        {/* ======================================================== */}
+        <Dialog open={!!previewImage} onOpenChange={(open) => !open && setPreviewImage(null)}>
+          <DialogContent className="max-w-5xl w-[95vw] max-h-[92vh] p-0 overflow-hidden bg-gray-950 border-gray-800 text-white rounded-2xl flex flex-col shadow-2xl">
+            {previewImage && (
+              <>
+                <div className="p-4 bg-gray-900 border-b border-gray-800 flex items-center justify-between">
+                  <div>
+                    <DialogTitle className="text-base sm:text-lg font-bold text-white flex items-center gap-2">
+                      <span>{previewImage.title}</span>
+                      <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-[var(--color-500)]/20 text-[var(--color-300)] border border-[var(--color-500)]/30">
+                        {previewImage.badge}
+                      </span>
+                    </DialogTitle>
+                    <DialogDescription className="text-xs text-gray-400 mt-0.5">
+                      {previewImage.subtitle}
+                    </DialogDescription>
+                  </div>
+                </div>
+
+                <div className="relative flex-1 overflow-auto p-2 sm:p-4 flex items-center justify-center bg-black/80 min-h-[300px] max-h-[70vh]">
+                  <img
+                    src={previewImage.image}
+                    alt={previewImage.title}
+                    className="max-h-[66vh] w-auto max-w-full object-contain rounded-lg shadow-2xl border border-gray-800"
+                  />
+                </div>
+
+                <div className="p-3 sm:p-4 bg-gray-900 border-t border-gray-800 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-gray-300">
+                  <p className="line-clamp-2 text-center sm:text-left flex-1 text-gray-400">
+                    {previewImage.desc}
+                  </p>
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    <Button
+                      onClick={() => {
+                        setPreviewImage(null);
+                        router.push("/Accueill");
+                      }}
+                      className="bg-[var(--color-600)] hover:bg-[var(--color-700)] text-white text-xs h-8 px-3 rounded-lg flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <Play className="w-3.5 h-3.5 fill-white" />
+                      <span>Accéder au module</span>
+                    </Button>
+                  </div>
+                </div>
+              </>
+            )}
+          </DialogContent>
+        </Dialog>
+
       </div>
     </div>
   );
