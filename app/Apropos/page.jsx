@@ -541,7 +541,7 @@ export default function AproposPage() {
             </div>
 
             {/* Carousel Navigation Buttons */}
-            <div className="flex items-center gap-2">
+            <div className="hidden md:flex items-center gap-2 ">
               <Button
                 variant="outline"
                 size="icon"
@@ -660,7 +660,32 @@ export default function AproposPage() {
                             </div>
                           </div>
                         </div>
-
+<div className=" flex items-center  justify-center pb-2 md:hidden ">
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={() =>
+                  setCurrentSlide((prev) =>
+                    prev === 0 ? CAROUSEL_SLIDES.length - 1 : prev - 1,
+                  )
+                }
+                className="h-9 w-9 mx-2 rounded-full border-gray-300 hover:bg-[var(--color-100)] text-gray-700 cursor-pointer"
+                title="Diapositive précédente"
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </Button>
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={() =>
+                  setCurrentSlide((prev) => (prev + 1) % CAROUSEL_SLIDES.length)
+                }
+                className="h-9 w-9 rounded-full border-gray-300 hover:bg-[var(--color-100)] text-gray-700 cursor-pointer"
+                title="Diapositive suivante"
+              >
+                <ChevronRight className="w-4 h-4" />
+              </Button>
+            </div>
                         {/* Right: Real App Screenshot Showcase Frame */}
                         <div
                           className={`lg:col-span-7 bg-gradient-to-br ${slide.color} p-4 sm:p-6 lg:p-8 flex items-center justify-center relative overflow-hidden`}
