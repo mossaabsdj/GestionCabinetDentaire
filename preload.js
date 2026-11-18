@@ -4,6 +4,7 @@ const { app } = require("electron");
 console.log("Preload script loaded");
 contextBridge.exposeInMainWorld("electron", {
   getAppPath: () => ipcRenderer.invoke("get-app-path"),
+  getUploadsPath: () => ipcRenderer.invoke("get-uploads-path"),
 
   printOrdonnance: (data) => ipcRenderer.send("printOrdonnance", data),
   printBilan: (data) => ipcRenderer.send("printBilan", data),

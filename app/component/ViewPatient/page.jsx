@@ -99,6 +99,7 @@ export default function PatientModal({ open, onClose, patient = {} }) {
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [basePath, setBasePath] = useState("");
+  const [previewFile, setPreviewFile] = useState(null);
 
   // Search filters per tab
   const [searchVisites, setSearchVisites] = useState("");
@@ -238,16 +239,71 @@ export default function PatientModal({ open, onClose, patient = {} }) {
     }
   };
 
-  // Open file helper (compatible Electron shell & web browser)
-  const handleOpenFile = (fileName) => {
+  // File URL and format helpers
+  const formatFileUrl = (filename) => {
+    if (!filename) return "";
+    if (
+      filename.startsWith("http://") ||
+      filename.startsWith("https://") ||
+      filename.startsWith("data:")
+    ) {
+      return filename;
+    }
+    return filename.startsWith("/") ? filename : `/uploads/${filename}`;
+  };
+
+  const isImageFile = (filename) => {
+    if (!filename) return false;
+    const lower = String(filename).toLowerCase();
+    return (
+      lower.endsWith(".jpg") ||
+      lower.endsWith(".jpeg") ||
+      lower.endsWith(".png") ||
+      lower.endsWith(".webp") ||
+      lower.endsWith(".gif") ||
+      lower.endsWith(".svg") ||
+      lower.endsWith(".bmp")
+    );
+  };
+
+  // Open file helper (compatible Electron shell & web browser with preview)
+  const handleOpenFile = async (fileName, title = "Document médical") => {
+    if (!fileName) return;
+
+    if (isImageFile(fileName)) {
+      setPreviewFile({ fichier: fileName, name: title });
+      return;
+    }
+
+    if (typeof window !== "undefined" && window?.electron?.openFile) {
+      try {
+        const res = await window.electron.openFile(fileName);
+        if (res && res.success === false) {
+          console.warn("[ViewPatient] Native openFile error, opening in browser:", res.error);
+          window.open(formatFileUrl(fileName), "_blank");
+        }
+      } catch (err) {
+        console.error("[ViewPatient] Electron openFile error:", err);
+        window.open(formatFileUrl(fileName), "_blank");
+      }
+    } else if (typeof window !== "undefined") {
+      window.open(formatFileUrl(fileName), "_blank");
+    }
+  };
+
+  const handleOpenExternally = async (fileName) => {
     if (!fileName) return;
     if (typeof window !== "undefined" && window?.electron?.openFile) {
-      const fullPath = basePath
-        ? `${basePath}/public/uploads/${fileName}`
-        : fileName;
-      window.electron.openFile(fullPath);
+      try {
+        const res = await window.electron.openFile(fileName);
+        if (res && res.success === false) {
+          window.open(formatFileUrl(fileName), "_blank");
+        }
+      } catch (err) {
+        window.open(formatFileUrl(fileName), "_blank");
+      }
     } else if (typeof window !== "undefined") {
-      window.open(`/uploads/${fileName}`, "_blank");
+      window.open(formatFileUrl(fileName), "_blank");
     }
   };
 
@@ -389,6 +445,7 @@ export default function PatientModal({ open, onClose, patient = {} }) {
   ];
 
   return (
+    <>
     <Dialog open={open} onOpenChange={onClose}>
       <DialogContent
         className="w-[96vw] max-w-[96vw] sm:max-w-[95vw] md:max-w-5xl lg:max-w-6xl xl:max-w-7xl max-h-[92vh] flex flex-col p-0 overflow-hidden bg-white rounded-2xl shadow-2xl border border-[var(--color-200)]"
@@ -812,7 +869,7 @@ export default function PatientModal({ open, onClose, patient = {} }) {
                                 key={r.id}
                                 size="sm"
                                 variant="outline"
-                                onClick={() => handleOpenFile(r.fichier)}
+                                onClick={() => handleOpenFile(r.fichier, r.description || "Radio")}
                                 className="border-gray-200 text-gray-700 hover:bg-gray-50 flex items-center gap-1 text-xs"
                               >
                                 <ImageIcon className="w-3.5 h-3.5 text-gray-500" />
@@ -1164,7 +1221,7 @@ export default function PatientModal({ open, onClose, patient = {} }) {
                               <Button
                                 size="sm"
                                 variant="outline"
-                                onClick={() => handleOpenFile(doc.fichier)}
+                                onClick={() => handleOpenFile(doc.fichier, doc.titre || doc.nom || "Document")}
                                 className="border-gray-200 text-gray-700 hover:bg-gray-50 flex items-center gap-1.5 text-xs"
                               >
                                 <ExternalLink className="w-3.5 h-3.5" />
@@ -1208,5 +1265,58 @@ export default function PatientModal({ open, onClose, patient = {} }) {
         </div>
       </DialogContent>
     </Dialog>
+
+    {/* In-App Image Preview Modal */}
+    <Dialog
+      open={Boolean(previewFile)}
+      onOpenChange={(val) => !val && setPreviewFile(null)}
+    >
+      <DialogContent className="sm:max-w-[700px] max-h-[90vh] overflow-hidden flex flex-col p-6 z-[60]">
+        <DialogHeader>
+          <DialogTitle className="text-lg font-bold text-gray-900 flex items-center justify-between">
+            <span>{previewFile?.name || "Aperçu de l'image"}</span>
+          </DialogTitle>
+        </DialogHeader>
+
+        <div className="flex-1 my-3 overflow-auto flex items-center justify-center bg-gray-950/5 rounded-xl border border-gray-200 p-2 min-h-[300px]">
+          {previewFile?.fichier && (
+            <img
+              src={formatFileUrl(previewFile.fichier)}
+              alt={previewFile.name}
+              className="max-h-[60vh] max-w-full object-contain rounded-lg shadow-sm"
+              onError={(e) => {
+                console.error("Image loading failed:", previewFile.fichier);
+                e.target.alt = "Image non trouvée ou inaccessible sur le serveur.";
+              }}
+            />
+          )}
+        </div>
+
+        <DialogFooter className="flex items-center justify-between gap-2 mt-2 pt-2 border-t border-gray-100">
+          <span className="text-xs text-gray-500 truncate max-w-[300px]">
+            {previewFile?.fichier}
+          </span>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => handleOpenExternally(previewFile?.fichier)}
+              className="flex items-center gap-1.5 text-xs"
+            >
+              <ExternalLink className="w-3.5 h-3.5" />
+              Ouvrir dans l'application système
+            </Button>
+            <Button
+              size="sm"
+              onClick={() => setPreviewFile(null)}
+              className="bg-gray-800 hover:bg-gray-900 text-white text-xs"
+            >
+              Fermer
+            </Button>
+          </div>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+    </>
   );
 }

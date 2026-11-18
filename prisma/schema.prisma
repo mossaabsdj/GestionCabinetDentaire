@@ -331,6 +331,7 @@ model Cabinet {
   specialtyAr   String?  @default("جراحة و طب الأسنان")
   cabinetName   String?  @default("Cabinet Dentaire")
   cabinetNameAr String?  @default("عيادة طب الأسنان")
+  numOrdre      String?  @default("")
   address       String?  @default("Rue Frères KAFI logts 38, 1er étage")
   addressAr     String?  @default("شارع الإخوة كافي عقار 38 الطابق الأول")
   city          String?  @default("El-Harrouch SKIKDA")

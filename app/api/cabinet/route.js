@@ -11,6 +11,7 @@ const DEFAULT_CABINET_DATA = {
   specialtyAr: "جراحة و طب الأسنان",
   cabinetName: "Cabinet Dentaire",
   cabinetNameAr: "عيادة طب الأسنان",
+  numOrdre: "",
   address: "Rue Frères KAFI logts 38, 1er étage",
   addressAr: "شارع الإخوة كافي عقار 38 الطابق الأول",
   city: "El-Harrouch SKIKDA",
@@ -79,6 +80,10 @@ export async function PUT(req) {
         body.cabinetNameAr !== undefined
           ? (typeof body.cabinetNameAr === "string" ? body.cabinetNameAr.trim() : body.cabinetNameAr)
           : (existing?.cabinetNameAr ?? DEFAULT_CABINET_DATA.cabinetNameAr),
+      numOrdre:
+        body.numOrdre !== undefined
+          ? (typeof body.numOrdre === "string" ? body.numOrdre.trim() : String(body.numOrdre ?? ""))
+          : (existing?.numOrdre ?? DEFAULT_CABINET_DATA.numOrdre),
       address:
         body.address !== undefined
           ? (typeof body.address === "string" ? body.address.trim() : body.address)

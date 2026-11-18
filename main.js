@@ -4,6 +4,13 @@ const { fork } = require("child_process");
 const { exec } = require("child_process");
 const { shell } = require("electron");
 const { Menu } = require("electron");
+const {
+  getAppRoot,
+  getUploadsDir,
+  resolveUploadedFilePath,
+  isImage,
+  isPdf,
+} = require("./upload-path");
 const { backupDatabase } = require("./backup");
 const { restoreDatabase, inspectBackupFile } = require("./restore");
 let prisma;
@@ -22,6 +29,7 @@ const DEFAULT_CABINET = {
   specialtyAr: "جراحة و طب الأسنان",
   cabinetName: "Cabinet Dentaire",
   cabinetNameAr: "عيادة طب الأسنان",
+  numOrdre: "",
   address: "Rue Frères KAFI logts 38, 1er étage",
   addressAr: "شارع الإخوة كافي عقار 38 الطابق الأول",
   city: "El-Harrouch SKIKDA",
@@ -395,9 +403,18 @@ app.whenReady().then(async () => {
   // Show splash screen first
   createSplashScreen();
 
-  // Start Next.js server
+  // Start Next.js server with canonical root and uploads directory
+  const appRoot = getAppRoot();
+  const uploadsDir = getUploadsDir();
   const serverScript = path.join(__dirname, "server.js");
-  serverProcess = fork(serverScript);
+  serverProcess = fork(serverScript, [], {
+    cwd: appRoot,
+    env: {
+      ...process.env,
+      APP_ROOT: appRoot,
+      APP_UPLOADS_DIR: uploadsDir,
+    },
+  });
 
   // Create main window (hidden initially)
   createWindow();
@@ -422,7 +439,11 @@ app.on("window-all-closed", () => {
 });
 
 ipcMain.handle("get-app-path", () => {
-  return path.dirname(path.dirname(app.getAppPath()));
+  return getAppRoot();
+});
+
+ipcMain.handle("get-uploads-path", () => {
+  return getUploadsDir();
 });
 
 ipcMain.handle("get-cabinet", async () => {
@@ -444,6 +465,7 @@ async function getElectronCabinet(customCab = {}) {
   const specialtyAr = cab.specialtyAr || "جراحة و طب الأسنان";
   const cabinetName = cab.cabinetName || "Cabinet Dentaire";
   const cabinetNameAr = cab.cabinetNameAr || "عيادة طب الأسنان";
+  const numOrdre = cab.numOrdre || "";
   const address = cab.address || "Rue Frères KAFI logts 38, 1er étage";
   const addressAr = cab.addressAr || "شارع الإخوة كافي عقار 38 الطابق الأول";
   const city = cab.city || "El-Harrouch SKIKDA";
@@ -457,17 +479,12 @@ async function getElectronCabinet(customCab = {}) {
     !logo.startsWith("http://") &&
     !logo.startsWith("https://")
   ) {
-    const cleanPath = logo.startsWith("/") ? logo.slice(1) : logo;
-    const fs = require("fs");
-    const cwdPath = path.join(process.cwd(), "public", cleanPath);
-    let fullImagePath = cwdPath;
-    if (!fs.existsSync(cwdPath)) {
-      const basePath = app.isPackaged
-        ? path.join(path.dirname(process.execPath), "public", cleanPath)
-        : path.resolve(__dirname, "..", "app");
-      fullImagePath = path.join(basePath, "public", cleanPath);
+    const resolved = resolveUploadedFilePath(logo);
+    if (resolved.exists) {
+      imageUrl = `file://${resolved.fullPath.replace(/\\/g, "/").replace(/ /g, "%20")}`;
+    } else {
+      imageUrl = `http://localhost:3000${resolved.url}`;
     }
-    imageUrl = `file://${fullImagePath.replace(/\\/g, "/").replace(/ /g, "%20")}`;
   }
 
   return {
@@ -477,6 +494,7 @@ async function getElectronCabinet(customCab = {}) {
     specialtyAr,
     cabinetName,
     cabinetNameAr,
+    numOrdre,
     address,
     addressAr,
     city,
@@ -751,7 +769,40 @@ ipcMain.handle("restore-database", async (event, options = {}) => {
   }
 });
 ipcMain.handle("open-file", async (event, filePath) => {
-  await shell.openPath(filePath);
+  try {
+    if (!filePath || typeof filePath !== "string") {
+      return { success: false, error: "Chemin de fichier non spécifié" };
+    }
+
+    if (filePath.startsWith("http://") || filePath.startsWith("https://")) {
+      await shell.openExternal(filePath);
+      return { success: true, url: filePath };
+    }
+
+    const resolved = resolveUploadedFilePath(filePath);
+    if (!resolved.exists) {
+      console.warn(
+        "[main.js] open-file: target file not found on disk:",
+        resolved.fullPath || filePath,
+      );
+      return {
+        success: false,
+        error: `Fichier introuvable sur le disque (${path.basename(filePath)})`,
+        fullPath: resolved.fullPath,
+      };
+    }
+
+    const errorMsg = await shell.openPath(resolved.fullPath);
+    if (errorMsg) {
+      console.error("[main.js] shell.openPath error:", errorMsg);
+      return { success: false, error: errorMsg, fullPath: resolved.fullPath };
+    }
+
+    return { success: true, fullPath: resolved.fullPath };
+  } catch (err) {
+    console.error("[main.js] open-file exception:", err);
+    return { success: false, error: err.message };
+  }
 });
 ipcMain.on("exit", () => {
   app.quit();

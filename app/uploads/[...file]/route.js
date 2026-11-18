@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import path from "path";
 import { readFile } from "fs/promises";
-import { existsSync } from "fs";
+import { resolveUploadedFilePath } from "@/lib/upload-path";
 
 export const dynamic = "force-dynamic";
 
@@ -14,7 +14,11 @@ const MIME_TYPES = {
   ".gif": "image/gif",
   ".ico": "image/x-icon",
   ".bmp": "image/bmp",
+  ".tiff": "image/tiff",
   ".pdf": "application/pdf",
+  ".txt": "text/plain; charset=utf-8",
+  ".json": "application/json",
+  ".xml": "application/xml",
 };
 
 export async function GET(req, { params }) {
@@ -26,27 +30,31 @@ export async function GET(req, { params }) {
       : String(fileSegments);
 
     // Prevent directory traversal
-    const safePath = path.normalize(relativePath).replace(/^(\.\.[\/\\])+/, "");
-    const filePath = path.join(process.cwd(), "public", "uploads", safePath);
+    const safePath = path
+      .normalize(decodeURIComponent(relativePath))
+      .replace(/^(\.\.[\/\\])+/, "");
 
-    if (!existsSync(filePath)) {
-      return new NextResponse("File not found", { status: 404 });
+    const resolved = resolveUploadedFilePath(safePath);
+
+    if (!resolved.exists) {
+      return new NextResponse(`File not found: ${safePath}`, { status: 404 });
     }
 
-    const fileBuffer = await readFile(filePath);
-    const ext = path.extname(filePath).toLowerCase();
+    const fileBuffer = await readFile(resolved.fullPath);
+    const ext = path.extname(resolved.fullPath).toLowerCase();
     const contentType = MIME_TYPES[ext] || "application/octet-stream";
 
     return new NextResponse(fileBuffer, {
       status: 200,
       headers: {
         "Content-Type": contentType,
+        "Content-Length": String(fileBuffer.length),
+        "Access-Control-Allow-Origin": "*",
         "Cache-Control": "public, max-age=86400, stale-while-revalidate=3600",
       },
     });
   } catch (error) {
-    console.error("Error serving uploaded file:", error);
+    console.error("[uploads/route] Error serving uploaded file:", error);
     return new NextResponse("Internal Server Error", { status: 500 });
   }
 }
-

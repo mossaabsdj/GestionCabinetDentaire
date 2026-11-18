@@ -65,9 +65,10 @@ function buildOrdonnanceHtml(
     '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="12" fill="#2f6db5"/><path fill="#fff" transform="translate(5.6 5.2) scale(0.53)" d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>';
   const addrFr = [cab.address, cab.city].filter(Boolean).join(", ");
   const addrAr = [cab.addressAr, cab.cityAr].filter(Boolean).join(" - ");
-  const orderNum = "8130/23"; // N° d'Ordre
-  const orderHtml = orderNum
-    ? `\n        <div class="ord-order">N° d'Ordre : ${orderNum}</div>`
+  const rawNumOrdre = String(cab?.numOrdre ?? "").trim();
+  const hasNumOrdre = rawNumOrdre && rawNumOrdre !== "0";
+  const orderHtml = hasNumOrdre
+    ? `\n        <div class="ord-order">N° d'Ordre : ${rawNumOrdre}</div>`
     : "";
   const phonesHtml = cab.phones
     ? `\n          <span class="ord-contact-item">${ICON_PHONE}<span>${cab.phones}</span></span>`
@@ -713,9 +714,10 @@ function buildBilanHtml(
     '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="12" fill="#2f6db5"/><path fill="#fff" transform="translate(5.6 5.2) scale(0.53)" d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>';
   const addrFr = [cab.address, cab.city].filter(Boolean).join(", ");
   const addrAr = [cab.addressAr, cab.cityAr].filter(Boolean).join(" - ");
-  const orderNum = "8130/23"; // N° d'Ordre
-  const orderHtml = orderNum
-    ? `\n        <div class="ord-order">N° d'Ordre : ${orderNum}</div>`
+  const rawNumOrdre = String(cab?.numOrdre ?? "").trim();
+  const hasNumOrdre = rawNumOrdre && rawNumOrdre !== "0";
+  const orderHtml = hasNumOrdre
+    ? `\n        <div class="ord-order">N° d'Ordre : ${rawNumOrdre}</div>`
     : "";
   const phonesHtml = cab.phones
     ? `\n          <span class="ord-contact-item">${ICON_PHONE}<span>${cab.phones}</span></span>`
@@ -1330,9 +1332,10 @@ function buildJustificationHtml(
     '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="12" fill="#2f6db5"/><path fill="#fff" transform="translate(5.6 5.2) scale(0.53)" d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>';
   const addrFr = [cab.address, cab.city].filter(Boolean).join(", ");
   const addrAr = [cab.addressAr, cab.cityAr].filter(Boolean).join(" - ");
-  const orderNum = "8130/23"; // N° d'Ordre
-  const orderHtml = orderNum
-    ? `\n        <div class="ord-order">N° d'Ordre : ${orderNum}</div>`
+  const rawNumOrdre = String(cab?.numOrdre ?? "").trim();
+  const hasNumOrdre = rawNumOrdre && rawNumOrdre !== "0";
+  const orderHtml = hasNumOrdre
+    ? `\n        <div class="ord-order">N° d'Ordre : ${rawNumOrdre}</div>`
     : "";
   const phonesHtml = cab.phones
     ? `\n          <span class="ord-contact-item">${ICON_PHONE}<span>${cab.phones}</span></span>`

@@ -1,46 +1,58 @@
 import { NextResponse } from "next/server";
-import path from "path";
-import { writeFile, mkdir } from "fs/promises";
+import { writeFile } from "fs/promises";
+import { getUploadsDir, getUniqueFilePath } from "@/lib/upload-path";
 
 export const dynamic = "force-dynamic";
 
-// Ensure the uploads directory exists
-const ensureUploadsDir = async (uploadDir) => {
+export async function POST(req) {
   try {
-    await mkdir(uploadDir, { recursive: true });
-  } catch (error) {
-    console.error("Error creating uploads directory:", error);
-  }
-};
+    const formData = await req.formData();
+    const file = formData.get("file");
+    const subfolder = formData.get("subfolder") || formData.get("folder") || "";
 
-export const POST = async (req) => {
-  const formData = await req.formData();
-  const file = formData.get("file");
+    if (!file || typeof file === "string") {
+      return NextResponse.json(
+        { error: "Aucun fichier reçu ou format invalide." },
+        { status: 400 },
+      );
+    }
 
-  if (!file) {
-    return NextResponse.json({ error: "No files received." }, { status: 400 });
-  }
+    const buffer = Buffer.from(await file.arrayBuffer());
+    if (buffer.length === 0) {
+      return NextResponse.json(
+        { error: "Le fichier reçu est vide (0 octets)." },
+        { status: 400 },
+      );
+    }
 
-  const buffer = Buffer.from(await file.arrayBuffer());
-  const filename = file.name.replace(/ /g, "_");
-  const uploadDir = path.join(process.cwd(), "public/uploads");
-  const filePath = path.join(uploadDir, filename);
+    // Resolve canonical uploads directory (e.g. public/uploads or public/uploads/radios)
+    const targetDir = getUploadsDir(String(subfolder));
+    const urlPrefix = subfolder ? `/uploads/${subfolder}` : "/uploads";
 
-  // Ensure the uploads directory exists
-  await ensureUploadsDir(uploadDir);
+    const { filename, fullPath, url } = getUniqueFilePath(
+      targetDir,
+      file.name || "upload.bin",
+      urlPrefix,
+    );
 
-  try {
-    await writeFile(filePath, buffer);
-    console.log("File uploaded to:", filePath);
+    await writeFile(fullPath, buffer);
+    console.log(`[api/upload] Successfully saved file (${buffer.length} bytes) to:`, fullPath);
+
     return NextResponse.json(
       {
-        message: "File uploaded successfully.",
-        url: `/uploads/${filename}`,
+        message: "Fichier téléversé avec succès.",
+        url,
+        filename,
+        fullPath,
+        size: buffer.length,
       },
       { status: 201 },
     );
   } catch (error) {
-    console.error("Error writing file:", error);
-    return NextResponse.json({ error: "File upload failed." }, { status: 500 });
+    console.error("[api/upload] Erreur lors du téléversement:", error);
+    return NextResponse.json(
+      { error: `Échec du téléversement: ${error.message}` },
+      { status: 500 },
+    );
   }
-};
+}

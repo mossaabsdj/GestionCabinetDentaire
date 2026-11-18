@@ -33,6 +33,8 @@
       "app.js",
       "public/**",
       "server.js",
+      "upload-path.js",
+      "lib/**",
       "backup.js",
       "restore.js",
       "backup-crypto.js",

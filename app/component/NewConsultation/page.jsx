@@ -535,7 +535,7 @@ export default function NewConsultationPage({
       const data = await res.json();
       setRadioForm((prev) => ({
         ...prev,
-        fichier: file.name,
+        fichier: data.url || data.filename,
         description: prev.description || file.name.replace(/\.[^/.]+$/, ""),
       }));
     } catch (err) {
@@ -1353,10 +1353,24 @@ export default function NewConsultationPage({
                 Fichier (image ou document)
               </label>
               {radioForm.fichier && (
-                <div className="mb-2 text-xs text-slate-600 flex items-center justify-between bg-slate-100 p-2 rounded-lg">
-                  <span className="truncate max-w-[280px]">
-                    Fichier : {radioForm.fichier}
-                  </span>
+                <div className="mb-2 bg-slate-50 border border-slate-200 p-2.5 rounded-xl space-y-2">
+                  <div className="text-xs text-slate-700 flex items-center justify-between font-medium">
+                    <span className="truncate max-w-[280px]">
+                      Fichier : {radioForm.fichier}
+                    </span>
+                    <span className="text-2xs text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200 font-semibold">
+                      Téléversé
+                    </span>
+                  </div>
+                  {/\.(jpg|jpeg|png|webp|gif|svg|bmp)$/i.test(radioForm.fichier) && (
+                    <div className="flex justify-center bg-white p-1 rounded-lg border border-slate-100 max-h-36 overflow-hidden">
+                      <img
+                        src={radioForm.fichier.startsWith("/") ? radioForm.fichier : `/uploads/${radioForm.fichier}`}
+                        alt="Aperçu radio"
+                        className="max-h-32 object-contain rounded"
+                      />
+                    </div>
+                  )}
                 </div>
               )}
               <Input
