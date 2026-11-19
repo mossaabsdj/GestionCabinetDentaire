@@ -61,6 +61,7 @@ const fadeIn = {
 };
 
 const DEFAULT_CABINET_DATA = {
+  appName: "Cabinet Dentaire",
   title: "Docteur",
   doctorName: "Docteur",
   doctorNameAr: "دكتور",
@@ -537,95 +538,90 @@ export default function ParametrePage() {
 
   // === Live Real-Time Print-Header Preview ===
   const HeaderPreview = (
-     
-
-      <div className="border-2 border-[#2c3e50] rounded-xl p-4 bg-white shadow-inner">
-        {/* Top Header Row (Bilingual + Central Logo) */}
-        <div className="flex justify-between items-start gap-4 pb-3 border-b-2 border-[#2c3e50]">
-          {/* Bloc Gauche : Médecin (Français) */}
-          <div className="flex-1 text-[11px] text-gray-800 leading-snug">
-            <strong className="text-sm text-[#2c3e50] font-extrabold block mb-0.5">
-              {cabinet.title ? `${cabinet.title} ` : ""}
-              {cabinet.doctorName || "Docteur"}
-            </strong>
-            <div className="text-gray-700 font-semibold mb-0.5 text-xs">
-              {cabinet.specialty || "Chirurgien Dentiste"}
+    <div className="border-2 border-[#2c3e50] rounded-xl p-4 bg-white shadow-inner">
+      {/* Top Header Row (Bilingual + Central Logo) */}
+      <div className="flex justify-between items-start gap-4 pb-3 border-b-2 border-[#2c3e50]">
+        {/* Bloc Gauche : Médecin (Français) */}
+        <div className="flex-1 text-[11px] text-gray-800 leading-snug">
+          <strong className="text-sm text-[#2c3e50] font-extrabold block mb-0.5">
+            {cabinet.doctorName || "Docteur"}
+          </strong>
+          <div className="text-gray-700 font-semibold mb-0.5 text-xs">
+            {cabinet.specialty || "Chirurgien Dentiste"}
+          </div>
+          {cabinet.cabinetName && (
+            <div className="text-gray-600 text-[10px] font-medium">
+              {cabinet.cabinetName}
             </div>
-            {cabinet.cabinetName && (
-              <div className="text-gray-600 text-[10px] font-medium">
-                {cabinet.cabinetName}
-              </div>
-            )}
-          </div>
-
-          {/* Logo Central */}
-          <div className="flex-shrink-0 w-20 h-20 flex items-center justify-center p-1.5 bg-gray-50/70 rounded-xl border border-gray-200">
-            <img
-              src={cabinet.logo || "/uploads/image.PNG"}
-              alt="Logo Cabinet"
-              className="max-h-full max-w-full object-contain"
-              onError={(e) => {
-                e.target.onerror = null;
-                e.target.src = "/uploads/image.PNG";
-              }}
-            />
-          </div>
-
-          {/* Bloc Droit : Médecin (Arabe) */}
-          <div
-            className="flex-1 text-[11px] text-gray-800 leading-snug text-right font-arabic"
-            dir="rtl"
-          >
-            <strong className="text-sm text-[#2c3e50] font-extrabold block mb-0.5">
-              {cabinet.doctorNameAr || "طبيب"}
-            </strong>
-            <div className="text-gray-700 font-semibold mb-0.5 text-xs">
-              {cabinet.specialtyAr || "جراحة الأسنان"}
-            </div>
-            {cabinet.cabinetNameAr && (
-              <div className="text-gray-600 text-[10px]">
-                {cabinet.cabinetNameAr}
-              </div>
-            )}
-          </div>
+          )}
         </div>
 
-        {/* N° d'Ordre Row (Instantly reacts to edits) */}
-        {showNumOrdre ? (
-          <div className="text-center font-bold text-xs text-slate-800 mt-2.5 py-1 px-4 bg-slate-50 border border-slate-200 rounded-md inline-block w-full">
-            N° d'Ordre : <span className="font-mono text-blue-900">{rawNumOrdre}</span>
-          </div>
-        ) : (
-          <div className="text-center text-[10px] text-gray-400 italic mt-2 py-0.5 bg-gray-50/60 rounded border border-dashed border-gray-200">
-            (N° d'ordre masqué sur l'impression car vide ou défini à 0)
-          </div>
-        )}
+        {/* Logo Central */}
+        <div className="flex-shrink-0 w-20 h-20 flex items-center justify-center p-1.5 bg-gray-50/70 rounded-xl border border-gray-200">
+          <img
+            src={cabinet.logo || "/uploads/image.PNG"}
+            alt="Logo Cabinet"
+            className="max-h-full max-w-full object-contain"
+            onError={(e) => {
+              e.target.onerror = null;
+              e.target.src = "/uploads/image.PNG";
+            }}
+          />
+        </div>
 
-        {/* Contact Strip / Pied d'en-tête */}
-        <div className="mt-3 pt-2 border-t border-gray-200 text-[11px] text-gray-700 space-y-1">
-          <div className="text-center font-bold text-gray-900">
-            <span>Tél : </span>
-            <span className="font-mono text-gray-800">
-              {cabinet.phones || "0652 76 89 72 / 0562 24 40 87"}
-            </span>
+        {/* Bloc Droit : Médecin (Arabe) */}
+        <div
+          className="flex-1 text-[11px] text-gray-800 leading-snug text-right font-arabic"
+          dir="rtl"
+        >
+          <strong className="text-sm text-[#2c3e50] font-extrabold block mb-0.5">
+            {cabinet.doctorNameAr || "طبيب"}
+          </strong>
+          <div className="text-gray-700 font-semibold mb-0.5 text-xs">
+            {cabinet.specialtyAr || "جراحة الأسنان"}
           </div>
-          <div className="flex flex-col sm:flex-row justify-between items-center text-center gap-1 text-[10px] text-gray-600 pt-1">
-            <span>
-              {[cabinet.address, cabinet.city].filter(Boolean).join(", ") ||
-                "Rue Frères KAFI logts 38, 1er étage, El-Harrouch SKIKDA"}
-            </span>
-            <span dir="rtl" className="font-arabic">
-              {[cabinet.addressAr, cabinet.cityAr].filter(Boolean).join(" - ") ||
-                "شارع الإخوة كافي عقار 38 الطابق الأول - الحروش سكيكدة"}
-            </span>
-          </div>
+          {cabinet.cabinetNameAr && (
+            <div className="text-gray-600 text-[10px]">
+              {cabinet.cabinetNameAr}
+            </div>
+          )}
         </div>
       </div>
 
-    
+      {/* N° d'Ordre Row (Instantly reacts to edits) */}
+      {showNumOrdre ? (
+        <div className="text-center font-bold text-xs text-slate-800 mt-2.5 py-1 px-4 bg-slate-50 border border-slate-200 rounded-md inline-block w-full">
+          N° d'Ordre : <span className="font-mono text-blue-900">{rawNumOrdre}</span>
+        </div>
+      ) : (
+        <div className="text-center text-[10px] text-gray-400 italic mt-2 py-0.5 bg-gray-50/60 rounded border border-dashed border-gray-200">
+          (N° d'ordre masqué sur l'impression car vide ou défini à 0)
+        </div>
+      )}
+
+      {/* Contact Strip / Pied d'en-tête */}
+      <div className="mt-3 pt-2 border-t border-gray-200 text-[11px] text-gray-700 space-y-1">
+        <div className="text-center font-bold text-gray-900">
+          <span>Tél : </span>
+          <span className="font-mono text-gray-800">
+            {cabinet.phones || "0652 76 89 72 / 0562 24 40 87"}
+          </span>
+        </div>
+        <div className="flex flex-col sm:flex-row justify-between items-center text-center gap-1 text-[10px] text-gray-600 pt-1">
+          <span>
+            {[cabinet.address, cabinet.city].filter(Boolean).join(", ") ||
+              "Rue Frères KAFI logts 38, 1er étage, El-Harrouch SKIKDA"}
+          </span>
+          <span dir="rtl" className="font-arabic">
+            {[cabinet.addressAr, cabinet.cityAr].filter(Boolean).join(" - ") ||
+              "شارع الإخوة كافي عقار 38 الطابق الأول - الحروش سكيكدة"}
+          </span>
+        </div>
+      </div>
+    </div>
   );
 
-  // === Form Inputs Component (Shared between page and modal) ===
+  // === Form Inputs (plain function, called as {CabinetFormContent()} so inputs keep focus) ===
   const CabinetFormContent = () => (
     <div className="space-y-6">
       {/* 1. Logo du Cabinet */}
@@ -688,7 +684,7 @@ export default function ParametrePage() {
         </div>
       </div>
 
-      {/* 2. Praticien & Spécialité */}
+      {/* 2. Praticien & Spécialité (FR à gauche | AR à droite) */}
       <div className="bg-slate-50/50 p-4 rounded-2xl border border-slate-200/80 space-y-4">
         <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-2">
           <User className="w-4 h-4 text-blue-600" />
@@ -696,13 +692,15 @@ export default function ParametrePage() {
         </h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <Field
+            className="md:col-span-2"
             icon={User}
-            label="Titre / Grade (Français)"
+            label="Nom de L'application"
             value={cabinet.title || ""}
             onChange={(e) => handleCabinetChange("title", e.target.value)}
             placeholder="Ex: Docteur ou Professeur"
-            helper="Affiché avant le nom du médecin"
           />
+
+          {/* Nom du praticien : FR | AR */}
           <Field
             icon={User}
             label="Nom du Praticien (Français)"
@@ -712,13 +710,14 @@ export default function ParametrePage() {
           />
           <Field
             rtl
-            className="md:col-span-2"
             icon={User}
-            label="اسم و لقب الطبيب / البروفيسور (العربية)"
+            label="اسم و لقب الطبيب (العربية)"
             value={cabinet.doctorNameAr || ""}
             onChange={(e) => handleCabinetChange("doctorNameAr", e.target.value)}
             placeholder="مثال: دكتور ديب أمال"
           />
+
+          {/* Spécialité : FR | AR */}
           <Field
             icon={Stethoscope}
             label="Spécialité médicale (Français)"
@@ -744,6 +743,7 @@ export default function ParametrePage() {
           Établissement & Conseil de l'Ordre
         </h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* Nom du cabinet : FR | AR */}
           <Field
             icon={Building2}
             label="Nom du cabinet (Français)"
@@ -859,7 +859,7 @@ export default function ParametrePage() {
             </div>
             <div>
               <h1 className="text-2xl font-bold text-gray-900">
-                Paramètres du Cabinet & Application
+                {cabinet.appName || "Paramètres du Cabinet & Application"}
               </h1>
               <p className="text-xs sm:text-sm text-gray-600">
                 Configuration centralisée de l'en-tête médical, N° d'ordre, thèmes et sauvegardes
@@ -915,8 +915,6 @@ export default function ParametrePage() {
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
             {/* Form Section */}
             <Card className="lg:col-span-7 border border-gray-200 shadow-sm bg-white overflow-hidden rounded-2xl">
-             
-
               <CardContent className="p-6">
                 {loadingCabinet ? (
                   <div className="flex items-center justify-center py-16">
@@ -927,7 +925,7 @@ export default function ParametrePage() {
                   </div>
                 ) : (
                   <form onSubmit={handleSaveCabinet} className="space-y-6">
-                    <CabinetFormContent />
+                    {CabinetFormContent()}
 
                     {/* Actions */}
                     <div className="flex flex-wrap items-center justify-between gap-3 pt-5 border-t border-gray-200">
@@ -983,7 +981,6 @@ export default function ParametrePage() {
                     Aperçu en direct de l'en-tête d'impression
                   </span>
                 </div>
-               
               </div>
               {HeaderPreview}
             </div>
@@ -999,10 +996,37 @@ export default function ParametrePage() {
                 Thème et apparence visuelle
               </CardTitle>
               <CardDescription className="text-sm text-gray-600">
-                Personnalisez la couleur d'accentuation et l'ambiance globale de l'interface
+                Personnalisez le nom de l'application, la couleur d'accentuation et l'ambiance globale de l'interface
               </CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="space-y-6">
+              {/* Nom de l'application */}
+              <div className="flex flex-col sm:flex-row sm:items-end gap-3 max-w-xl">
+                <Field
+                  className="flex-1"
+                  icon={Sparkles}
+                  label="Nom de l'application"
+                  value={cabinet.appName || ""}
+                  onChange={(e) => handleCabinetChange("appName", e.target.value)}
+                  placeholder="Ex: Cabinet Dentaire"
+                  helper="Affiché comme titre de l'application"
+                />
+                <button
+                  type="button"
+                  onClick={handleSaveCabinet}
+                  disabled={savingCabinet}
+                  className="px-5 py-2.5 text-sm font-bold text-white bg-[var(--color-600)] hover:bg-[var(--color-700)] rounded-xl transition-all shadow-sm disabled:opacity-50 inline-flex items-center justify-center gap-2"
+                >
+                  {savingCabinet ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Save className="w-4 h-4" />
+                  )}
+                  Enregistrer
+                </button>
+              </div>
+
+              {/* Thème */}
               <Select value={theme} onValueChange={handleThemeChange}>
                 <SelectTrigger className="w-full md:w-80 rounded-xl">
                   <SelectValue placeholder="Sélectionner un thème" />
@@ -1116,9 +1140,7 @@ export default function ParametrePage() {
             </DialogDescription>
           </DialogHeader>
 
-          <div className="py-2">
-            <CabinetFormContent />
-          </div>
+          <div className="py-2">{CabinetFormContent()}</div>
 
           <DialogFooter className="mt-4 pt-3 border-t border-gray-100 gap-2">
             <button
