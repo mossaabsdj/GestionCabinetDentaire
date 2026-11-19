@@ -537,16 +537,7 @@ export default function ParametrePage() {
 
   // === Live Real-Time Print-Header Preview ===
   const HeaderPreview = (
-    <div className="bg-white border-2 border-[#2c3e50] rounded-2xl p-5 shadow-lg transition-all duration-150">
-      <div className="flex items-center justify-between pb-3 mb-4 border-b border-gray-100">
-        <div className="flex items-center gap-2 text-xs font-bold text-emerald-700 bg-emerald-50 px-3 py-1 rounded-full border border-emerald-200 shadow-2xs">
-          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-          Aperçu en direct (Temps réel)
-        </div>
-        <span className="text-2xs text-gray-400 font-semibold uppercase tracking-wider">
-          En-tête A4 / Ordonnance
-        </span>
-      </div>
+     
 
       <div className="border-2 border-[#2c3e50] rounded-xl p-4 bg-white shadow-inner">
         {/* Top Header Row (Bilingual + Central Logo) */}
@@ -631,13 +622,7 @@ export default function ParametrePage() {
         </div>
       </div>
 
-      <div className="mt-4 p-3 bg-blue-50/70 border border-blue-100 rounded-xl flex items-start gap-2.5">
-        <Sparkles className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
-        <p className="text-xs text-blue-800 leading-relaxed">
-          Toutes vos modifications dans le formulaire ou la boîte modale sont répercutées <strong>instantanément en direct</strong> sur cet aperçu sans rechargement.
-        </p>
-      </div>
-    </div>
+    
   );
 
   // === Form Inputs Component (Shared between page and modal) ===
@@ -930,25 +915,7 @@ export default function ParametrePage() {
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
             {/* Form Section */}
             <Card className="lg:col-span-7 border border-gray-200 shadow-sm bg-white overflow-hidden rounded-2xl">
-              <CardHeader className="bg-gradient-to-r from-gray-50 via-white to-gray-50 border-b border-gray-100 pb-4">
-                <div className="flex items-center justify-between">
-                  <CardTitle className="text-lg font-bold text-gray-900 flex items-center gap-2">
-                    <Stethoscope className="w-5 h-5 text-[var(--color-600)]" />
-                    En-tête & Informations du Cabinet
-                  </CardTitle>
-                  <button
-                    type="button"
-                    onClick={() => setIsCabinetModalOpen(true)}
-                    className="text-xs font-medium text-blue-600 hover:text-blue-800 inline-flex items-center gap-1"
-                  >
-                    <ExternalLink className="w-3.5 h-3.5" />
-                    Mode boîte modale
-                  </button>
-                </div>
-                <CardDescription className="text-xs sm:text-sm text-gray-600">
-                  Renseignez l'ensemble des détails du médecin, de la clinique et le N° d'ordre. Ces données sont imprimées sur les ordonnances, bilans et justificatifs.
-                </CardDescription>
-              </CardHeader>
+             
 
               <CardContent className="p-6">
                 {loadingCabinet ? (
@@ -1016,9 +983,7 @@ export default function ParametrePage() {
                     Aperçu en direct de l'en-tête d'impression
                   </span>
                 </div>
-                <span className="text-2xs bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-full">
-                  Direct
-                </span>
+               
               </div>
               {HeaderPreview}
             </div>
