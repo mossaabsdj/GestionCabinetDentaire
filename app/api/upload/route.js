@@ -35,7 +35,7 @@ export async function POST(req) {
       urlPrefix,
     );
 
-    await writeFile(fullPath, buffer);
+    await writeFile(/*turbopackIgnore: true*/ fullPath, buffer);
     console.log(`[api/upload] Successfully saved file (${buffer.length} bytes) to:`, fullPath);
 
     return NextResponse.json(

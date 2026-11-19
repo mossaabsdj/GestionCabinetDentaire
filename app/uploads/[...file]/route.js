@@ -40,7 +40,7 @@ export async function GET(req, { params }) {
       return new NextResponse(`File not found: ${safePath}`, { status: 404 });
     }
 
-    const fileBuffer = await readFile(resolved.fullPath);
+    const fileBuffer = await readFile(/*turbopackIgnore: true*/ resolved.fullPath);
     const ext = path.extname(resolved.fullPath).toLowerCase();
     const contentType = MIME_TYPES[ext] || "application/octet-stream";
 

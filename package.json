@@ -6,10 +6,10 @@
   "private": true,
   "main": "main.js",
   "scripts": {
-    "postinstall": "prisma generate",
+    "postinstall": "prisma generate && node scripts/fix-prisma-tracing.js",
     "dev": "next dev",
-    "build": "prisma generate && next build",
-    "release": "electron-builder ",
+    "build": "prisma generate && node scripts/fix-prisma-tracing.js && next build",
+    "release": "electron-builder --publish never",
     "start": "next start",
     "electron:dev": "concurrently \"npm run dev\" \"npm run electron\"",
     "electron": "electron main.js",
