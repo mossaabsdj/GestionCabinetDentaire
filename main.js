@@ -1,9 +1,35 @@
-const { app, BrowserWindow, ipcMain, dialog } = require("electron");
+const electron = require("electron");
+const app = electron.app;
+const BrowserWindow = electron.BrowserWindow;
+const ipcMain = electron.ipcMain;
+const dialog = electron.dialog;
+const shell = electron.shell;
+const Menu = electron.Menu;
+
 const path = require("path");
-const { fork } = require("child_process");
-const { exec } = require("child_process");
-const { shell } = require("electron");
-const { Menu } = require("electron");
+const fs = require("fs");
+const http = require("http");
+const { fork, exec } = require("child_process");
+
+// 1. Load environment variables securely (packed inside app.asar in production)
+const { loadEnv } = require("./lib/env-loader");
+loadEnv();
+
+// 2. Configure Prisma query engine path for packaged / dev environments before Prisma initializes
+const isPackaged = app ? app.isPackaged : Boolean(process.resourcesPath);
+if (isPackaged) {
+  process.env.PRISMA_QUERY_ENGINE_LIBRARY = path.join(
+    process.resourcesPath,
+    "app.asar.unpacked",
+    "app/generated/prisma/query_engine-windows.dll.node",
+  );
+} else {
+  process.env.PRISMA_QUERY_ENGINE_LIBRARY = path.join(
+    __dirname,
+    "app/generated/prisma/query_engine-windows.dll.node",
+  );
+}
+
 const {
   getAppRoot,
   getUploadsDir,
@@ -68,26 +94,191 @@ async function getCabinetData() {
   return cachedCabinet || DEFAULT_CABINET;
 }
 
-let mainWindow;
-let splashWindow;
-let serverProcess;
+let mainWindow = null;
+let splashWindow = null;
+let serverProcess = null;
 
-// if using ES modules
-//const __filename = fileURLToPath(import.meta.url);
-//const __dirname = path.dirname(__filename);
-// main.js - ADD THIS AT THE TOP
+const SERVER_PORT = parseInt(process.env.PORT, 10) || 3000;
+const SERVER_HOST = process.env.HOST || "127.0.0.1";
+const SERVER_URL = `http://${SERVER_HOST}:${SERVER_PORT}`;
+const MIN_SPLASH_TIME = 2000;
 
-if (app.isPackaged) {
-  process.env.PRISMA_QUERY_ENGINE_LIBRARY = path.join(
-    process.resourcesPath,
-    "app.asar.unpacked",
-    "app/generated/prisma/query_engine-windows.dll.node",
-  );
-} else {
-  process.env.PRISMA_QUERY_ENGINE_LIBRARY = path.join(
-    __dirname,
-    "app/generated/prisma/query_engine-windows.dll.node",
-  );
+let serverStderrBuffer = [];
+let isServerExited = false;
+let isServerReady = false;
+
+function resolveServerScript() {
+  const candidates = [
+    path.join(__dirname, "server.js"),
+    app && typeof app.getAppPath === "function" ? path.join(app.getAppPath(), "server.js") : null,
+    process.resourcesPath ? path.join(process.resourcesPath, "app.asar", "server.js") : null,
+    process.resourcesPath ? path.join(process.resourcesPath, "app.asar.unpacked", "server.js") : null,
+    path.join(process.cwd(), "server.js"),
+  ].filter(Boolean);
+
+  for (const p of candidates) {
+    if (fs.existsSync(p)) {
+      return p;
+    }
+  }
+  return path.join(__dirname, "server.js");
+}
+
+function checkServerOnce(url, timeoutMs = 1200) {
+  return new Promise((resolve) => {
+    try {
+      const u = new URL(url);
+      const req = http.get(
+        {
+          hostname: u.hostname === "localhost" ? "127.0.0.1" : u.hostname,
+          port: u.port || SERVER_PORT,
+          path: "/",
+          timeout: timeoutMs,
+        },
+        (res) => {
+          resolve(true);
+        }
+      );
+      req.on("error", () => resolve(false));
+      req.on("timeout", () => {
+        req.destroy();
+        resolve(false);
+      });
+    } catch (_) {
+      resolve(false);
+    }
+  });
+}
+
+async function startServer() {
+  // If server is ALREADY listening (e.g. Next.js dev server started via 'npm run dev'), reuse it
+  const alreadyRunning = await checkServerOnce(SERVER_URL);
+  if (alreadyRunning) {
+    console.log(`[main.js] Server already responding on ${SERVER_URL}. Reusing existing instance.`);
+    isServerReady = true;
+    return;
+  }
+
+  const serverScript = resolveServerScript();
+  const appRoot = getAppRoot();
+  const uploadsDir = getUploadsDir();
+
+  console.log(`[main.js] Resolved server script: ${serverScript}`);
+  console.log(`[main.js] Working directory: ${appRoot}`);
+  console.log(`[main.js] Packaged state: ${isPackaged}`);
+
+  const serverEnv = {
+    ...process.env,
+    ELECTRON_RUN_AS_NODE: "1",
+    NODE_ENV: isPackaged ? "production" : (process.env.NODE_ENV || "development"),
+    APP_ROOT: appRoot,
+    APP_UPLOADS_DIR: uploadsDir,
+    PORT: String(SERVER_PORT),
+    HOST: SERVER_HOST,
+  };
+
+  if (isPackaged && process.resourcesPath) {
+    serverEnv.PRISMA_QUERY_ENGINE_LIBRARY = path.join(
+      process.resourcesPath,
+      "app.asar.unpacked",
+      "app/generated/prisma/query_engine-windows.dll.node",
+    );
+  }
+
+  serverProcess = fork(serverScript, [], {
+    cwd: appRoot,
+    env: serverEnv,
+    stdio: ["ignore", "pipe", "pipe", "ipc"],
+  });
+
+  if (serverProcess.stdout) {
+    serverProcess.stdout.on("data", (chunk) => {
+      const text = chunk.toString();
+      console.log(`[server] ${text.trim()}`);
+    });
+  }
+
+  if (serverProcess.stderr) {
+    serverProcess.stderr.on("data", (chunk) => {
+      const text = chunk.toString();
+      console.error(`[server ERR] ${text.trim()}`);
+      serverStderrBuffer.push(text);
+      if (serverStderrBuffer.length > 50) serverStderrBuffer.shift();
+    });
+  }
+
+  serverProcess.on("error", (err) => {
+    console.error("[main.js] serverProcess error:", err);
+  });
+
+  serverProcess.on("exit", (code, signal) => {
+    console.log(`[main.js] serverProcess exited with code ${code}, signal ${signal}`);
+    isServerExited = true;
+    if (code !== 0 && code !== null) {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        dialog.showErrorBox(
+          "Arrêt inattendu du serveur",
+          `Le serveur d'application Next.js s'est arrêté inopinément (code: ${code}).\n\n` +
+          `L'application va se fermer.`
+        );
+        app.quit();
+      }
+    }
+  });
+}
+
+function waitForServer(url, timeoutMs = 30000) {
+  if (isServerReady) return Promise.resolve();
+
+  const startTime = Date.now();
+  return new Promise((resolve, reject) => {
+    let checkInterval = null;
+
+    const onMessage = (msg) => {
+      if (msg && msg.type === "server-ready") {
+        cleanup();
+        isServerReady = true;
+        resolve();
+      } else if (msg && msg.type === "server-error") {
+        cleanup();
+        reject(new Error(msg.error || "Erreur signalée par le serveur Next.js"));
+      }
+    };
+
+    if (serverProcess) {
+      serverProcess.on("message", onMessage);
+    }
+
+    checkInterval = setInterval(async () => {
+      if (isServerExited) {
+        cleanup();
+        const errDetails = serverStderrBuffer.join("\n").trim() || "Le processus serveur a quitté sans message d'erreur.";
+        reject(new Error(`Le processus serveur a quitté avant d'être prêt.\n\n${errDetails}`));
+        return;
+      }
+
+      if (Date.now() - startTime > timeoutMs) {
+        cleanup();
+        const errDetails = serverStderrBuffer.join("\n").trim();
+        reject(new Error(`Délai d'attente dépassé (${Math.round(timeoutMs / 1000)}s) sans réponse du serveur.\n\n${errDetails}`));
+        return;
+      }
+
+      const ok = await checkServerOnce(url, 800);
+      if (ok) {
+        cleanup();
+        isServerReady = true;
+        resolve();
+      }
+    }, 300);
+
+    function cleanup() {
+      if (checkInterval) clearInterval(checkInterval);
+      if (serverProcess) {
+        serverProcess.removeListener("message", onMessage);
+      }
+    }
+  });
 }
 
 function createSplashScreen() {
@@ -261,7 +452,7 @@ function createSplashScreen() {
   });
 }
 
-function createWindow() {
+function createWindow(serverUrl = SERVER_URL, splashStartTime = 0) {
   mainWindow = new BrowserWindow({
     fullscreen: false,
     resizable: false,
@@ -274,26 +465,27 @@ function createWindow() {
     },
   });
 
-  // Wait until the server starts before loading the Electron window
-  const serverUrl = "http://localhost:3000";
-  const checkServer = setInterval(() => {
-    fetch(serverUrl)
-      .then(() => {
-        clearInterval(checkServer);
-        mainWindow.loadURL(serverUrl);
-      })
-      .catch(() => console.log("Waiting for server..."));
-  }, 1000);
+  mainWindow.loadURL(serverUrl);
 
-  // Show main window and close splash when ready
+  // Show main window and close splash only when content is ready
   mainWindow.once("ready-to-show", () => {
+    const elapsed = splashStartTime ? (Date.now() - splashStartTime) : MIN_SPLASH_TIME;
+    const remainingDelay = Math.max(0, MIN_SPLASH_TIME - elapsed);
+
     setTimeout(() => {
-      if (splashWindow) {
+      if (splashWindow && !splashWindow.isDestroyed()) {
         splashWindow.close();
+        splashWindow = null;
       }
-      mainWindow.show();
-      mainWindow.maximize();
-    }, 2000); // Show splash for at least 2 seconds
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.show();
+        mainWindow.maximize();
+      }
+    }, remainingDelay);
+  });
+
+  mainWindow.on("closed", () => {
+    mainWindow = null;
   });
 }
 
@@ -395,36 +587,44 @@ function createMenu() {
 }
 
 app.whenReady().then(async () => {
+  const splashStartTime = Date.now();
+
+  // Show splash screen first
+  createSplashScreen();
+
   // Pre-load cabinet data from database
   try {
     await getCabinetData();
   } catch (e) {}
 
-  // Show splash screen first
-  createSplashScreen();
+  try {
+    // 1. Launch Next.js server (or reuse existing in dev)
+    await startServer();
 
-  // Start Next.js server with canonical root and uploads directory
-  const appRoot = getAppRoot();
-  const uploadsDir = getUploadsDir();
-  const serverScript = path.join(__dirname, "server.js");
-  serverProcess = fork(serverScript, [], {
-    cwd: appRoot,
-    env: {
-      ...process.env,
-      APP_ROOT: appRoot,
-      APP_UPLOADS_DIR: uploadsDir,
-    },
-  });
+    // 2. Wait until server is completely ready and listening
+    await waitForServer(SERVER_URL, 35000);
 
-  // Create main window (hidden initially)
-  createWindow();
+    // 3. Open main window pointing to verified SERVER_URL
+    createWindow(SERVER_URL, splashStartTime);
 
-  // Create menu
-  createMenu();
+    // 4. Create application menu
+    createMenu();
+  } catch (err) {
+    console.error("[main.js] Startup failure:", err);
+    if (splashWindow && !splashWindow.isDestroyed()) {
+      splashWindow.close();
+      splashWindow = null;
+    }
+    dialog.showErrorBox(
+      "Erreur de démarrage du serveur",
+      `Impossible de démarrer le serveur interne :\n\n${err.message}\n\nL'application va se fermer.`
+    );
+    app.quit();
+  }
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) {
-      createWindow();
+      createWindow(SERVER_URL, 0);
     }
   });
 });
@@ -433,8 +633,13 @@ app.on("window-all-closed", () => {
   if (process.platform !== "darwin") {
     app.quit();
   }
+});
+
+app.on("before-quit", () => {
   if (serverProcess) {
-    serverProcess.kill();
+    try {
+      serverProcess.kill();
+    } catch (_) {}
   }
 });
 
@@ -503,7 +708,6 @@ async function getElectronCabinet(customCab = {}) {
     imageUrl,
   };
 }
-const fs = require("fs");
 const os = require("os");
 const {
   buildOrdonnanceHtml,

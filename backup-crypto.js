@@ -17,6 +17,11 @@ const zlib = require("zlib");
 const fs = require("fs");
 const path = require("path");
 
+try {
+  const { loadEnv } = require("./lib/env-loader");
+  loadEnv();
+} catch (_) {}
+
 const BACKUP_FORMAT = "CABINET_SECURE_BACKUP";
 const BACKUP_VERSION = 1;
 

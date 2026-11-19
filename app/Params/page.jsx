@@ -1000,31 +1000,7 @@ export default function ParametrePage() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
-              {/* Nom de l'application */}
-              <div className="flex flex-col sm:flex-row sm:items-end gap-3 max-w-xl">
-                <Field
-                  className="flex-1"
-                  icon={Sparkles}
-                  label="Nom de l'application"
-                  value={cabinet.appName || ""}
-                  onChange={(e) => handleCabinetChange("appName", e.target.value)}
-                  placeholder="Ex: Cabinet Dentaire"
-                  helper="Affiché comme titre de l'application"
-                />
-                <button
-                  type="button"
-                  onClick={handleSaveCabinet}
-                  disabled={savingCabinet}
-                  className="px-5 py-2.5 text-sm font-bold text-white bg-[var(--color-600)] hover:bg-[var(--color-700)] rounded-xl transition-all shadow-sm disabled:opacity-50 inline-flex items-center justify-center gap-2"
-                >
-                  {savingCabinet ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <Save className="w-4 h-4" />
-                  )}
-                  Enregistrer
-                </button>
-              </div>
+              
 
               {/* Thème */}
               <Select value={theme} onValueChange={handleThemeChange}>
