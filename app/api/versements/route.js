@@ -11,10 +11,35 @@ export async function GET(req) {
     const { searchParams } = new URL(req.url);
     const patientId = searchParams.get("patientId");
     const traitementId = searchParams.get("traitementId");
+    const startDateParam = searchParams.get("startDate");
+    const endDateParam = searchParams.get("endDate");
+    const q = searchParams.get("q")?.trim();
 
     const where = {};
     if (patientId) where.patientId = Number(patientId);
     if (traitementId) where.traitementId = Number(traitementId);
+
+    if (startDateParam || endDateParam) {
+      where.date = {};
+      if (startDateParam) {
+        const s = new Date(startDateParam);
+        s.setHours(0, 0, 0, 0);
+        where.date.gte = s;
+      }
+      if (endDateParam) {
+        const e = new Date(endDateParam);
+        e.setHours(23, 59, 59, 999);
+        where.date.lte = e;
+      }
+    }
+
+    if (q) {
+      where.OR = [
+        { patient: { nom: { contains: q, mode: "insensitive" } } },
+        { traitement: { description: { contains: q, mode: "insensitive" } } },
+        { note: { contains: q, mode: "insensitive" } },
+      ];
+    }
 
     const versements = await prisma.paiement.findMany({
       where,
@@ -162,12 +187,83 @@ export async function POST(req) {
 }
 
 // =====================
+// PUT /api/versements
+// =====================
+export async function PUT(req) {
+  try {
+    const body = await req.json();
+    const { id, montant, note, date } = body;
+
+    const idNum = Number(id);
+    if (!idNum || isNaN(idNum)) {
+      return NextResponse.json(
+        { error: "Identifiant du versement manquant ou invalide" },
+        { status: 400 }
+      );
+    }
+
+    const updateData = {};
+    if (montant !== undefined) {
+      const parsed = parseFloat(montant);
+      if (isNaN(parsed) || parsed <= 0) {
+        return NextResponse.json(
+          { error: "Le montant doit être un nombre strictement supérieur à 0" },
+          { status: 400 }
+        );
+      }
+      updateData.montant = parsed;
+    }
+
+    if (note !== undefined) {
+      updateData.note = note ? note.trim() : null;
+    }
+
+    if (date) {
+      const parsedDate = new Date(date);
+      if (!isNaN(parsedDate.getTime())) {
+        updateData.date = parsedDate;
+      }
+    }
+
+    const updated = await prisma.paiement.update({
+      where: { id: idNum },
+      data: updateData,
+      include: {
+        patient: { select: { id: true, nom: true, telephone: true } },
+        traitement: {
+          select: {
+            id: true,
+            description: true,
+            dent: true,
+            prixTotal: true,
+            statut: true,
+          },
+        },
+      },
+    });
+
+    return NextResponse.json(updated);
+  } catch (error) {
+    console.error("PUT /api/versements error:", error);
+    return NextResponse.json(
+      { error: "Erreur lors de la modification du versement: " + error.message },
+      { status: 500 }
+    );
+  }
+}
+
+// =====================
 // DELETE /api/versements
 // =====================
 export async function DELETE(req) {
   try {
     const { searchParams } = new URL(req.url);
-    const id = searchParams.get("id");
+    let id = searchParams.get("id");
+
+    if (!id) {
+      const body = await req.json().catch(() => ({}));
+      id = body?.id;
+    }
 
     if (!id) {
       return NextResponse.json(
