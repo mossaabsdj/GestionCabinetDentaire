@@ -30,6 +30,7 @@ import {
   BarChart3,
   CalendarDays,
   Percent,
+  Loader2,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -105,6 +106,20 @@ export default function FinanceDashboardPage() {
   const [versementNote, setVersementNote] = useState("");
   const [versementSubmitting, setVersementSubmitting] = useState(false);
   const [patientSearchInModal, setPatientSearchInModal] = useState("");
+  const [versementFormError, setVersementFormError] = useState("");
+
+  const selectedPatient = useMemo(() => {
+    return (
+      patientsList.find((p) => p.id === Number(selectedPatientId)) || null
+    );
+  }, [patientsList, selectedPatientId]);
+
+  const selectedTraitement = useMemo(() => {
+    return (
+      patientTreatments.find((t) => t.id === Number(selectedTraitementId)) ||
+      null
+    );
+  }, [patientTreatments, selectedTraitementId]);
 
   // Depense Modal states (Add / Edit)
   const [depenseModalOpen, setDepenseModalOpen] = useState(false);
@@ -235,20 +250,27 @@ export default function FinanceDashboardPage() {
     setSelectedPatientId(patientId);
     setSelectedTraitementId("");
     setPatientTreatments([]);
+    setVersementFormError("");
 
     if (!patientId) return;
 
     try {
-      const res = await fetch(`/api/patients?id=${patientId}`);
+      const res = await fetch(`/api/traitements?patientId=${patientId}`);
       if (res.ok) {
-        const pData = await res.json();
-        const treatmentsWithRemaining = (pData.traitements || []).filter(
-          (t) => t.statut !== "ANNULE" && (t.resteAPayer === undefined || t.resteAPayer > 0)
+        const trData = await res.json();
+        const treatmentsWithRemaining = (trData || []).filter(
+          (t) =>
+            t.statut !== "ANNULE" &&
+            (t.resteAPayer === undefined || t.resteAPayer > 0)
         );
         setPatientTreatments(treatmentsWithRemaining);
+        if (treatmentsWithRemaining.length > 0) {
+          setSelectedTraitementId(String(treatmentsWithRemaining[0].id));
+        }
       }
     } catch (err) {
       console.error("Erreur chargement soins patient:", err);
+      setVersementFormError("Erreur lors de la récupération des soins du patient.");
     }
   };
 
@@ -264,45 +286,71 @@ export default function FinanceDashboardPage() {
     setVersementDate(new Date().toISOString().split("T")[0]);
     setVersementNote("");
     setPatientSearchInModal("");
+    setVersementFormError("");
     setVersementModalOpen(true);
     if (patientsList.length === 0) {
       fetchPatientsForModal();
     }
   };
 
-  const handleOpenEditVersement = (v) => {
+  const handleOpenEditVersement = async (v) => {
     setEditingVersement(v);
     setSelectedPatientId(String(v.patientId || ""));
+    setSelectedTraitementId(String(v.traitementId || ""));
     setVersementMontant(String(v.montant || ""));
     const dStr = v.date
       ? new Date(v.date).toISOString().split("T")[0]
       : new Date().toISOString().split("T")[0];
     setVersementDate(dStr);
     setVersementNote(v.note || "");
+    setVersementFormError("");
     setVersementModalOpen(true);
+
+    if (v.patientId) {
+      try {
+        const res = await fetch(`/api/traitements?patientId=${v.patientId}`);
+        if (res.ok) {
+          const trData = await res.json();
+          setPatientTreatments(trData || []);
+        }
+      } catch (_) {}
+    }
   };
 
   const handleSaveVersement = async (e) => {
     e.preventDefault();
+    setVersementFormError("");
+
+    if (!editingVersement) {
+      if (!selectedPatientId) {
+        setVersementFormError("Veuillez sélectionner un patient.");
+        return;
+      }
+
+      if (!selectedTraitementId) {
+        setVersementFormError(
+          "Veuillez associer le versement à un traitement ayant un solde restant."
+        );
+        return;
+      }
+    }
+
     const parsedMontant = parseFloat(versementMontant);
     if (isNaN(parsedMontant) || parsedMontant <= 0) {
-      Swal.fire({
-        icon: "warning",
-        title: "Montant invalide",
-        text: "Le montant du versement doit être supérieur à 0 DZD.",
-        confirmButtonColor: "#059669",
-      });
+      setVersementFormError("Le montant du versement doit être supérieur à 0 DZD.");
       return;
     }
 
-    if (!editingVersement && !selectedPatientId) {
-      Swal.fire({
-        icon: "warning",
-        title: "Patient obligatoire",
-        text: "Veuillez sélectionner un patient.",
-        confirmButtonColor: "#059669",
-      });
-      return;
+    if (selectedTraitement) {
+      const reste = selectedTraitement.resteAPayer || 0;
+      if (parsedMontant > reste + 0.001) {
+        setVersementFormError(
+          `Le versement dépasse le solde restant (${reste.toLocaleString(
+            "fr-FR"
+          )} DZD) pour ce traitement.`
+        );
+        return;
+      }
     }
 
     setVersementSubmitting(true);
@@ -316,20 +364,17 @@ export default function FinanceDashboardPage() {
             id: editingVersement.id,
             montant: parsedMontant,
             note: versementNote.trim() || null,
-            date: versementDate ? new Date(versementDate).toISOString() : new Date().toISOString(),
+            date: versementDate
+              ? new Date(versementDate).toISOString()
+              : new Date().toISOString(),
           }),
         });
 
         const resData = await res.json();
-        if (!res.ok) throw new Error(resData.error || "Erreur de modification du versement");
-
-        Swal.fire({
-          icon: "success",
-          title: "Versement modifié",
-          text: "Le versement a été mis à jour avec succès.",
-          timer: 1800,
-          showConfirmButton: false,
-        });
+        if (!res.ok)
+          throw new Error(
+            resData.error || "Erreur de modification du versement"
+          );
       } else {
         // Create new payment
         const res = await fetch("/api/versements", {
@@ -337,35 +382,38 @@ export default function FinanceDashboardPage() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             patientId: Number(selectedPatientId),
-            traitementId: selectedTraitementId ? Number(selectedTraitementId) : null,
+            traitementId: Number(selectedTraitementId),
             montant: parsedMontant,
             note: versementNote.trim() || null,
-            date: versementDate ? new Date(versementDate).toISOString() : new Date().toISOString(),
+            date: versementDate
+              ? new Date(versementDate).toISOString()
+              : new Date().toISOString(),
           }),
         });
 
         const resData = await res.json();
-        if (!res.ok) throw new Error(resData.error || "Erreur d'enregistrement du versement");
-
-        Swal.fire({
-          icon: "success",
-          title: "Versement enregistré",
-          text: "Le paiement a été encaissé avec succès.",
-          timer: 1800,
-          showConfirmButton: false,
-        });
+        if (!res.ok)
+          throw new Error(
+            resData.error || "Erreur d'enregistrement du versement"
+          );
       }
 
+      // Close modal and refresh - NO SweetAlert
       setVersementModalOpen(false);
-      fetchFinanceData();
+      setSelectedPatientId("");
+      setSelectedTraitementId("");
+      setPatientTreatments([]);
+      setVersementMontant("");
+      setVersementNote("");
+      setVersementDate(new Date().toISOString().split("T")[0]);
+      setVersementFormError("");
+
+      await fetchFinanceData();
     } catch (err) {
       console.error(err);
-      Swal.fire({
-        icon: "error",
-        title: "Erreur",
-        text: err.message || "Impossible d'enregistrer le versement.",
-        confirmButtonColor: "#059669",
-      });
+      setVersementFormError(
+        err?.message || "Impossible d'enregistrer le versement."
+      );
     } finally {
       setVersementSubmitting(false);
     }
@@ -1874,46 +1922,61 @@ export default function FinanceDashboardPage() {
         </Dialog>
 
         {/* ======================================================== */}
-        {/* MODAL 2: AJOUTER / MODIFIER UN VERSEMENT                 */}
+        {/* MODAL 2: NOUVEAU VERSEMENT (STYLE DU PATIENT)            */}
         {/* ======================================================== */}
         <Dialog open={versementModalOpen} onOpenChange={setVersementModalOpen}>
-          <DialogContent className="sm:max-w-md rounded-2xl p-6 bg-white shadow-xl">
+          <DialogContent className="sm:max-w-md rounded-2xl p-6 bg-white dark:bg-card border border-[var(--color-100)] dark:border-border shadow-xl">
             <DialogHeader>
-              <div className="flex items-center gap-2.5 mb-1">
-                <div className="p-2 rounded-xl bg-emerald-100 text-emerald-700">
-                  <TrendingUp className="w-5 h-5" />
-                </div>
-                <DialogTitle className="text-lg font-bold text-slate-800">
-                  {editingVersement ? "Modifier le versement" : "Encaisser un versement"}
-                </DialogTitle>
-              </div>
-              <DialogDescription className="text-xs text-slate-500">
-                {editingVersement
-                  ? "Modifiez les informations du versement sélectionné."
-                  : "Enregistrez un encaissement patient et affectez-le à un soin."}
+              <DialogTitle className="text-xl font-bold text-[var(--color-700)] dark:text-[var(--color-300)] flex items-center gap-2">
+                <DollarSign className="w-5 h-5 text-[var(--color-600)]" />
+                {editingVersement ? "Modifier le versement" : "Nouveau versement"}
+              </DialogTitle>
+              <DialogDescription className="text-xs text-slate-500 dark:text-muted-foreground">
+                {selectedPatient ? (
+                  <>
+                    Enregistrer un paiement pour le patient{" "}
+                    <strong className="text-slate-800 dark:text-foreground">
+                      {selectedPatient.nom}
+                    </strong>
+                    .
+                  </>
+                ) : (
+                  "Enregistrer un versement patient associé à un traitement."
+                )}
               </DialogDescription>
             </DialogHeader>
 
-            <form onSubmit={handleSaveVersement} className="space-y-4 pt-2">
-              {/* Patient selection (only when adding) */}
+            <form onSubmit={handleSaveVersement} className="space-y-4 mt-3">
+              {/* Inline Error Banner */}
+              {versementFormError && (
+                <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-600 flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                  <span>{versementFormError}</span>
+                </div>
+              )}
+
+              {/* Patient Selector (when adding) */}
               {!editingVersement && (
-                <div className="space-y-1.5">
-                  <Label className="text-xs font-semibold text-slate-700">
-                    Patient <span className="text-red-500">*</span>
-                  </Label>
+                <div>
+                  <label className="block text-xs font-semibold text-[var(--color-700)] dark:text-[var(--color-300)] uppercase tracking-wider mb-1.5">
+                    Patient *
+                  </label>
                   <div className="space-y-1.5">
-                    <Input
-                      type="text"
-                      placeholder="Rechercher un patient par nom ou tél..."
-                      value={patientSearchInModal}
-                      onChange={(e) => setPatientSearchInModal(e.target.value)}
-                      className="text-xs h-8 rounded-lg border-slate-200"
-                    />
+                    <div className="relative">
+                      <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                      <Input
+                        type="text"
+                        placeholder="Rechercher par nom ou téléphone..."
+                        value={patientSearchInModal}
+                        onChange={(e) => setPatientSearchInModal(e.target.value)}
+                        className="pl-8 text-xs h-9 rounded-xl border-[var(--color-200)] bg-white"
+                      />
+                    </div>
                     <select
                       value={selectedPatientId}
                       onChange={(e) => handlePatientSelectChange(e.target.value)}
                       required
-                      className="w-full text-xs h-9 rounded-xl border border-slate-200 bg-white px-3 text-slate-800 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                      className="w-full h-11 px-3 rounded-xl border border-[var(--color-200)] dark:border-border bg-white dark:bg-card text-foreground focus:ring-2 focus:ring-[var(--color-400)] focus:border-[var(--color-500)] text-sm outline-none transition-all"
                     >
                       <option value="">Sélectionner un patient...</option>
                       {modalFilteredPatients.map((pt) => (
@@ -1926,103 +1989,132 @@ export default function FinanceDashboardPage() {
                 </div>
               )}
 
-              {/* Treatment selection (when adding and patient chosen) */}
+              {/* Treatment Selector */}
               {!editingVersement && selectedPatientId && (
-                <div className="space-y-1.5">
-                  <Label className="text-xs font-semibold text-slate-700">
-                    Soin / Traitement associé (Optionnel)
-                  </Label>
-                  <select
-                    value={selectedTraitementId}
-                    onChange={(e) => setSelectedTraitementId(e.target.value)}
-                    className="w-full text-xs h-9 rounded-xl border border-slate-200 bg-white px-3 text-slate-800 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                  >
-                    <option value="">Versement libre (sans affectation)</option>
-                    {patientTreatments.map((t) => (
-                      <option key={t.id} value={t.id}>
-                        {t.description || "Traitement"} {t.dent ? `(Dent ${t.dent})` : ""} — Reste :{" "}
-                        {Number(t.resteAPayer || 0).toLocaleString("fr-FR")} DZD
-                      </option>
-                    ))}
-                  </select>
+                <div>
+                  <label className="block text-xs font-semibold text-[var(--color-700)] dark:text-[var(--color-300)] uppercase tracking-wider mb-1.5">
+                    Associer à un traitement *
+                  </label>
+                  {patientTreatments.length === 0 ? (
+                    <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800 flex items-center gap-2">
+                      <AlertCircle className="w-4 h-4 flex-shrink-0 text-amber-600" />
+                      <span>Ce patient n'a aucun traitement en cours avec un solde restant à payer.</span>
+                    </div>
+                  ) : (
+                    <select
+                      value={selectedTraitementId}
+                      onChange={(e) => {
+                        setSelectedTraitementId(e.target.value);
+                        setVersementFormError("");
+                      }}
+                      required
+                      className="w-full h-11 px-3 rounded-xl border border-[var(--color-200)] dark:border-border bg-white dark:bg-card text-foreground focus:ring-2 focus:ring-[var(--color-400)] focus:border-[var(--color-500)] text-sm outline-none transition-all"
+                    >
+                      {patientTreatments.map((t) => (
+                        <option key={t.id} value={t.id}>
+                          {t.description} {t.dent ? `(Dent ${t.dent})` : ""} — Reste : {(t.resteAPayer || 0).toLocaleString("fr-FR")} DZD
+                        </option>
+                      ))}
+                    </select>
+                  )}
                 </div>
               )}
 
-              {/* Montant */}
-              <div className="space-y-1.5">
-                <Label className="text-xs font-semibold text-slate-700">
-                  Montant encaissé (DZD) <span className="text-red-500">*</span>
-                </Label>
-                <div className="relative">
-                  <Input
-                    type="number"
-                    step="any"
-                    min="1"
-                    required
-                    placeholder="Ex: 5000"
-                    value={versementMontant}
-                    onChange={(e) => setVersementMontant(e.target.value)}
-                    className="rounded-xl border-slate-200 text-sm pr-12 focus:ring-1 focus:ring-emerald-500"
-                    autoFocus
-                  />
-                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">
-                    DZD
+              {/* Reste à payer sur ce soin */}
+              {selectedTraitement && (
+                <div className="p-3 bg-[var(--color-50)] dark:bg-muted/40 border border-[var(--color-200)] dark:border-border rounded-xl flex items-center justify-between text-xs">
+                  <span className="text-[var(--color-700)] dark:text-[var(--color-300)] font-medium">
+                    Reste à payer sur ce soin :
                   </span>
+                  <span className="font-bold text-[var(--color-900)] dark:text-foreground text-sm">
+                    {(selectedTraitement.resteAPayer || 0).toLocaleString("fr-FR")} DZD
+                  </span>
+                </div>
+              )}
+
+              {/* Montant du versement */}
+              <div>
+                <label className="block text-xs font-semibold text-[var(--color-700)] dark:text-[var(--color-300)] uppercase tracking-wider mb-1.5">
+                  Montant du versement (DZD) *
+                </label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  required
+                  max={selectedTraitement ? selectedTraitement.resteAPayer : undefined}
+                  value={versementMontant}
+                  onChange={(e) => {
+                    setVersementMontant(e.target.value);
+                    setVersementFormError("");
+                  }}
+                  placeholder="Ex: 5000"
+                  className="h-11 rounded-xl text-base font-semibold border-[var(--color-200)] dark:border-border focus:ring-2 focus:ring-[var(--color-400)] focus:border-[var(--color-500)] bg-white dark:bg-card text-foreground"
+                />
+                {selectedTraitement && parseFloat(versementMontant) > (selectedTraitement.resteAPayer || 0) && (
+                  <p className="text-[11px] text-red-600 font-medium mt-1">
+                    ⚠️ Le versement dépasse le solde restant ({(selectedTraitement.resteAPayer || 0).toLocaleString("fr-FR")} DZD).
+                  </p>
+                )}
+              </div>
+
+              {/* Grid Date & Note */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-[var(--color-700)] dark:text-[var(--color-300)] uppercase tracking-wider mb-1.5">
+                    Date
+                  </label>
+                  <Input
+                    type="date"
+                    value={versementDate}
+                    onChange={(e) => setVersementDate(e.target.value)}
+                    className="h-11 rounded-xl border-[var(--color-200)] dark:border-border focus:ring-2 focus:ring-[var(--color-400)] focus:border-[var(--color-500)] bg-white dark:bg-card text-foreground text-sm"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-[var(--color-700)] dark:text-[var(--color-300)] uppercase tracking-wider mb-1.5">
+                    Note / Référence
+                  </label>
+                  <Input
+                    type="text"
+                    value={versementNote}
+                    onChange={(e) => setVersementNote(e.target.value)}
+                    placeholder="Ex: Espèces, Virement..."
+                    className="h-11 rounded-xl border-[var(--color-200)] dark:border-border focus:ring-2 focus:ring-[var(--color-400)] focus:border-[var(--color-500)] bg-white dark:bg-card text-foreground text-sm"
+                  />
                 </div>
               </div>
 
-              {/* Date */}
-              <div className="space-y-1.5">
-                <Label className="text-xs font-semibold text-slate-700">
-                  Date de versement <span className="text-red-500">*</span>
-                </Label>
-                <Input
-                  type="date"
-                  required
-                  value={versementDate}
-                  onChange={(e) => setVersementDate(e.target.value)}
-                  className="rounded-xl border-slate-200 text-xs focus:ring-1 focus:ring-emerald-500"
-                />
-              </div>
-
-              {/* Note */}
-              <div className="space-y-1.5">
-                <Label className="text-xs font-semibold text-slate-700">
-                  Observation / Note (Optionnel)
-                </Label>
-                <Input
-                  type="text"
-                  placeholder="Ex: Espèces, Virement, Acompte..."
-                  value={versementNote}
-                  onChange={(e) => setVersementNote(e.target.value)}
-                  className="rounded-xl border-slate-200 text-xs focus:ring-1 focus:ring-emerald-500"
-                />
-              </div>
-
-              <DialogFooter className="pt-2 gap-2 sm:gap-0">
+              {/* Footer */}
+              <DialogFooter className="mt-6 flex justify-end gap-3">
                 <Button
                   type="button"
                   variant="outline"
                   onClick={() => setVersementModalOpen(false)}
-                  disabled={versementSubmitting}
-                  className="rounded-xl text-xs border-slate-200"
+                  className="rounded-xl border-slate-300 dark:border-border text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-muted"
                 >
                   Annuler
                 </Button>
                 <Button
                   type="submit"
-                  disabled={versementSubmitting}
-                  className="rounded-xl text-xs bg-emerald-600 hover:bg-emerald-700 text-white shadow font-semibold"
+                  disabled={
+                    versementSubmitting ||
+                    !versementMontant ||
+                    parseFloat(versementMontant) <= 0 ||
+                    (!editingVersement && (!selectedPatientId || !selectedTraitementId || patientTreatments.length === 0)) ||
+                    (selectedTraitement && parseFloat(versementMontant) > (selectedTraitement.resteAPayer || 0) + 0.001)
+                  }
+                  className="bg-[var(--color-600)] hover:bg-[var(--color-700)] text-white font-medium rounded-xl shadow-md flex items-center gap-2"
                 >
                   {versementSubmitting ? (
                     <>
-                      <RefreshCw className="w-3.5 h-3.5 animate-spin mr-1.5" />
+                      <Loader2 className="w-4 h-4 animate-spin" />
                       Enregistrement...
                     </>
                   ) : editingVersement ? (
                     "Modifier le versement"
                   ) : (
-                    "Encaisser"
+                    "Valider le versement"
                   )}
                 </Button>
               </DialogFooter>

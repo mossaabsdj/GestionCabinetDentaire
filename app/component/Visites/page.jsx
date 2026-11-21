@@ -869,8 +869,7 @@ export default function PatientVisits({
                   </div>
                 </div>
 
-                {/* ROW 2: Documents Navigation Bar */}
-                {docChips.length > 0 && (
+                {/* ROW 2: Documents Navigation Bar  {docChips.length > 0 && (
                   <div className="px-4 sm:px-6 lg:px-8 py-2 bg-[var(--color-50)] border-t border-[var(--color-100)]/80 flex items-center gap-2 overflow-x-auto no-scrollbar">
                     <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 shrink-0 mr-1">
                       Documents
@@ -919,7 +918,8 @@ export default function PatientVisits({
                       })}
                     </div>
                   </div>
-                )}
+                )} */}
+               
               </DialogHeader>
 
               {/* ========= SCROLLABLE BODY ========= */}
